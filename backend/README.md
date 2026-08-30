@@ -38,6 +38,23 @@ workout/    WorkoutEntry entity + DTOs, repository, service, controller
 config/     CORS setup for the Flutter client
 ```
 
+## Deploy
+
+Built as a Docker image ([Dockerfile](Dockerfile)) — Render has no native
+Java runtime. The blueprint is [render.yaml](../render.yaml) at the **repo
+root** (Render only looks there; its `rootDir: backend` points back here).
+
+Configured entirely by environment variable:
+
+| Variable          | Purpose                                            |
+|-------------------|----------------------------------------------------|
+| `PORT`            | Injected by the host; defaults to 8080 locally      |
+| `ALLOWED_ORIGINS` | Comma-separated CORS origins for the deployed frontend |
+
+⚠️ Still H2 in-memory: **all data is lost on every restart, sleep, or
+redeploy**, and there is no authentication — anyone with the URL can read
+or delete entries.
+
 ## Next steps
 
 - Swap H2 for Postgres (add `spring-boot-starter-data-jpa` driver + update

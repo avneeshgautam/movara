@@ -4,21 +4,22 @@
 # This file MUST live at the repository root -- Render only looks for it
 # there. `rootDir` below is what points the service at the backend/ folder.
 #
+# Render has no native `java` runtime, so this builds via Docker
+# (backend/Dockerfile), which also pins the JDK version explicitly.
+#
 # NOTE: the free plan sleeps after ~15 minutes of inactivity. Because this
 # service still uses an in-memory H2 database, EVERY sleep or redeploy wipes
 # all logged workouts. Move to Postgres before relying on the data.
 services:
   - type: web
     name: movara-backend
-    runtime: java
+    runtime: docker
     plan: free
     rootDir: backend
-    buildCommand: ./mvnw clean package -DskipTests
-    startCommand: java -jar target/backend-0.0.1-SNAPSHOT.jar
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /api/exercises
     envVars:
-      - key: JAVA_VERSION
-        value: "21"
       # Set this to your deployed frontend origin once it exists, e.g.
       # https://movara.pages.dev  (no trailing slash)
       - key: ALLOWED_ORIGINS
