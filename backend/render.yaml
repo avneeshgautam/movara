@@ -1,0 +1,22 @@
+# Render blueprint for the Movara backend.
+# In Render: New -> Blueprint -> point at this repo.
+#
+# NOTE: the free plan sleeps after ~15 minutes of inactivity. Because this
+# service still uses an in-memory H2 database, EVERY sleep or redeploy wipes
+# all logged workouts. Move to Postgres before relying on the data.
+services:
+  - type: web
+    name: movara-backend
+    runtime: java
+    plan: free
+    rootDir: backend
+    buildCommand: ./mvnw clean package -DskipTests
+    startCommand: java -jar target/backend-0.0.1-SNAPSHOT.jar
+    healthCheckPath: /api/exercises
+    envVars:
+      - key: JAVA_VERSION
+        value: "21"
+      # Set this to your deployed frontend origin once it exists, e.g.
+      # https://movara.pages.dev  (no trailing slash)
+      - key: ALLOWED_ORIGINS
+        sync: false

@@ -1,0 +1,33 @@
+server:
+  # Hosts like Render/Cloud Run inject the port to bind. Falls back to 8080 locally.
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: movara-backend
+
+  datasource:
+    url: jdbc:h2:mem:movara;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# Origins allowed to call the API, comma separated.
+# In production set ALLOWED_ORIGINS to your deployed frontend, e.g.
+#   ALLOWED_ORIGINS=https://movara.pages.dev
+movara:
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:*,http://127.0.0.1:*}
