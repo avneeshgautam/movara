@@ -1,6 +1,9 @@
 # Render blueprint for the Movara backend.
 # In Render: New -> Blueprint -> point at this repo.
 #
+# This file MUST live at the repository root -- Render only looks for it
+# there. `rootDir` below is what points the service at the backend/ folder.
+#
 # NOTE: the free plan sleeps after ~15 minutes of inactivity. Because this
 # service still uses an in-memory H2 database, EVERY sleep or redeploy wipes
 # all logged workouts. Move to Postgres before relying on the data.
