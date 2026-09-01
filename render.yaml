@@ -7,9 +7,9 @@
 # Render has no native `java` runtime, so this builds via Docker
 # (backend/Dockerfile), which also pins the JDK version explicitly.
 #
-# NOTE: the free plan sleeps after ~15 minutes of inactivity. Because this
-# service still uses an in-memory H2 database, EVERY sleep or redeploy wipes
-# all logged workouts. Move to Postgres before relying on the data.
+# Data lives in MongoDB Atlas (see MONGODB_URI below), so it now PERSISTS
+# across the free plan's sleeps and redeploys. The plan still sleeps after
+# ~15 min idle, which only means a slow first request, not data loss.
 services:
   - type: web
     name: movara-backend
@@ -20,7 +20,12 @@ services:
     dockerContext: .
     healthCheckPath: /api/exercises
     envVars:
-      # Set this to your deployed frontend origin once it exists, e.g.
-      # https://movara.pages.dev  (no trailing slash)
+      # Your MongoDB Atlas connection string, INCLUDING the /movara database
+      # name and password. sync:false keeps it out of git -- set the real
+      # value in the Render dashboard (Environment tab), never here.
+      - key: MONGODB_URI
+        sync: false
+      # Set this to your deployed frontend origin, e.g.
+      # https://movara-9ol.pages.dev  (no trailing slash)
       - key: ALLOWED_ORIGINS
         sync: false

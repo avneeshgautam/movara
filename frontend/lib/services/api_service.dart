@@ -39,7 +39,7 @@ class ApiService {
     return WorkoutEntry.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  Future<void> deleteWorkoutEntry(int id) async {
+  Future<void> deleteWorkoutEntry(String id) async {
     final response = await _client.delete(_uri('/workout-entries/$id'));
     _checkOk(response, expected: 204);
   }

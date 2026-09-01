@@ -1,7 +1,8 @@
 /// A single logged unit of work: N sets of M reps of an exercise,
 /// optionally with a weight, on a given day.
 class WorkoutEntry {
-  final int? id;
+  // MongoDB ObjectId, e.g. "6a95c5d8d9dfd9105acec7d0".
+  final String? id;
   final String exerciseName;
   final int sets;
   final int reps;
@@ -21,7 +22,7 @@ class WorkoutEntry {
 
   factory WorkoutEntry.fromJson(Map<String, dynamic> json) {
     return WorkoutEntry(
-      id: json['id'] as int?,
+      id: json['id'] as String?,
       exerciseName: json['exerciseName'] as String,
       sets: json['sets'] as int,
       reps: json['reps'] as int,

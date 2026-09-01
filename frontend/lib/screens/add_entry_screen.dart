@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../models/exercise.dart';
 import '../models/workout_entry.dart';
 import '../services/api_service.dart';
+import '../theme/app_theme.dart';
+import '../theme/movara_colors.dart';
 
 class AddEntryScreen extends StatefulWidget {
   const AddEntryScreen({super.key, required this.api});
@@ -203,26 +205,39 @@ class _Stepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final c = context.movara;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        color: c.surface2,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
         children: [
-          Text(label, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(color: c.textMuted, fontSize: 10, letterSpacing: 1.2),
+          ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
                 icon: const Icon(Icons.remove_circle_outline),
+                color: c.textSecondary,
                 onPressed: value > 1 ? () => onChanged(value - 1) : null,
               ),
-              Text('$value', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+              Text(
+                '$value',
+                style: AppTheme.display(
+                  color: c.textPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               IconButton(
                 icon: const Icon(Icons.add_circle_outline),
+                color: c.accent,
                 onPressed: () => onChanged(value + 1),
               ),
             ],

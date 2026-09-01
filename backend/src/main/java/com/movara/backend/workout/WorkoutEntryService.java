@@ -31,11 +31,13 @@ public class WorkoutEntryService {
     }
 
     public WorkoutEntryResponse create(WorkoutEntryRequest request) {
+        // Keep the exercises collection populated for the autocomplete list,
+        // but store the name directly on the entry (denormalized).
         Exercise exercise = exerciseRepository.findByNameIgnoreCase(request.exerciseName())
                 .orElseGet(() -> exerciseRepository.save(new Exercise(request.exerciseName(), null)));
 
         WorkoutEntry entry = new WorkoutEntry(
-                exercise,
+                exercise.getName(),
                 request.sets(),
                 request.reps(),
                 request.weightKg(),
@@ -46,7 +48,7 @@ public class WorkoutEntryService {
         return WorkoutEntryResponse.from(workoutEntryRepository.save(entry));
     }
 
-    public void delete(Long id) {
+    public void delete(String id) {
         workoutEntryRepository.deleteById(id);
     }
 }

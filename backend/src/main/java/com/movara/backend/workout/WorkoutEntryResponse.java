@@ -3,7 +3,7 @@ package com.movara.backend.workout;
 import java.time.LocalDate;
 
 public record WorkoutEntryResponse(
-        Long id,
+        String id,
         String exerciseName,
         int sets,
         int reps,
@@ -14,7 +14,7 @@ public record WorkoutEntryResponse(
     public static WorkoutEntryResponse from(WorkoutEntry entry) {
         return new WorkoutEntryResponse(
                 entry.getId(),
-                entry.getExercise().getName(),
+                entry.getExerciseName(),
                 entry.getSets(),
                 entry.getReps(),
                 entry.getWeightKg(),

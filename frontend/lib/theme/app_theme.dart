@@ -1,54 +1,101 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-/// Central place to tweak Movara's look. Swap the seed color or fonts here
-/// and the whole app follows.
+import 'movara_colors.dart';
+
+/// Builds the app themes from the Figma design tokens in [MovaraColors].
+///
+/// Typography follows the design: Syne for display/headings, Inter for body.
 class AppTheme {
-  static const _seed = Color(0xFF2E7D5B); // a calm "progress" green
+  static ThemeData dark() => _build(MovaraColors.dark, Brightness.dark);
 
-  static ThemeData light() {
-    final scheme = ColorScheme.fromSeed(seedColor: _seed);
-    return ThemeData(
-      useMaterial3: true,
+  static ThemeData light() => _build(MovaraColors.light, Brightness.light);
+
+  /// Syne — used for headings, numbers and anything that should feel like a
+  /// display face. Exposed so widgets can opt in per-text-span.
+  static TextStyle display({
+    required Color color,
+    double? fontSize,
+    FontWeight fontWeight = FontWeight.w700,
+    double? letterSpacing,
+    double? height,
+  }) {
+    return GoogleFonts.syne(
+      color: color,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      letterSpacing: letterSpacing,
+      height: height,
+    );
+  }
+
+  static ThemeData _build(MovaraColors c, Brightness brightness) {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: c.accent,
+      brightness: brightness,
+    ).copyWith(
+      primary: c.accent,
+      surface: c.surface,
+      error: const Color(0xFFEF4444),
+    );
+
+    final base = brightness == Brightness.dark
+        ? ThemeData.dark(useMaterial3: true)
+        : ThemeData.light(useMaterial3: true);
+
+    return base.copyWith(
       colorScheme: scheme,
-      scaffoldBackgroundColor: scheme.surface,
-      appBarTheme: AppBarTheme(
-        backgroundColor: scheme.surface,
-        foregroundColor: scheme.onSurface,
-        elevation: 0,
-        centerTitle: false,
-        titleTextStyle: TextStyle(
-          color: scheme.onSurface,
-          fontSize: 22,
-          fontWeight: FontWeight.w700,
-        ),
+      scaffoldBackgroundColor: c.bg,
+      canvasColor: c.bg,
+      extensions: [c],
+      textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
+        bodyColor: c.textPrimary,
+        displayColor: c.textPrimary,
       ),
-      cardTheme: CardThemeData(
+      appBarTheme: AppBarTheme(
+        backgroundColor: c.bg,
+        foregroundColor: c.textPrimary,
         elevation: 0,
-        color: scheme.surfaceContainerHigh,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        margin: EdgeInsets.zero,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        titleTextStyle: display(color: c.textPrimary, fontSize: 20),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surfaceContainerHighest,
+        fillColor: c.surface2,
+        hintStyle: TextStyle(color: c.textMuted),
+        labelStyle: TextStyle(color: c.textSecondary),
+        prefixIconColor: c.textSecondary,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: c.border),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: c.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: c.accent, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
+          backgroundColor: c.accent,
+          foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: GoogleFonts.syne(fontWeight: FontWeight.w700, fontSize: 16),
         ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: scheme.primary,
-        foregroundColor: scheme.onPrimary,
+        backgroundColor: c.accent,
+        foregroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
+      dividerColor: c.border,
+      iconTheme: IconThemeData(color: c.textSecondary),
     );
   }
 }

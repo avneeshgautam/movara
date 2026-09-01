@@ -42,7 +42,7 @@ public class WorkoutEntryController {
 
     @DeleteMapping("/api/workout-entries/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteEntry(@PathVariable Long id) {
+    public void deleteEntry(@PathVariable String id) {
         workoutEntryService.delete(id);
     }
 }

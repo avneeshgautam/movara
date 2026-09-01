@@ -2,41 +2,33 @@ package com.movara.backend.workout;
 
 import java.time.LocalDate;
 
-import com.movara.backend.exercise.Exercise;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
  * One logged unit of work: "N sets of M reps" of a given exercise,
  * optionally with a weight, on a given day.
+ *
+ * The exercise is stored denormalized as a plain name rather than a
+ * reference: MongoDB has no SQL-style joins, and the API already identifies
+ * exercises by name. The `exercises` collection is kept separately just to
+ * back the autocomplete list.
  */
-@Entity
+@Document(collection = "workout_entries")
 public class WorkoutEntry {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "exercise_id", nullable = false)
-    private Exercise exercise;
+    private String exerciseName;
 
-    @Column(nullable = false)
     private int sets;
 
-    @Column(nullable = false)
     private int reps;
 
     /** Weight per rep, in kg. Optional (e.g. bodyweight exercises). */
     private Double weightKg;
 
-    @Column(nullable = false)
     private LocalDate performedAt;
 
     private String notes;
@@ -44,8 +36,8 @@ public class WorkoutEntry {
     public WorkoutEntry() {
     }
 
-    public WorkoutEntry(Exercise exercise, int sets, int reps, Double weightKg, LocalDate performedAt, String notes) {
-        this.exercise = exercise;
+    public WorkoutEntry(String exerciseName, int sets, int reps, Double weightKg, LocalDate performedAt, String notes) {
+        this.exerciseName = exerciseName;
         this.sets = sets;
         this.reps = reps;
         this.weightKg = weightKg;
@@ -53,20 +45,20 @@ public class WorkoutEntry {
         this.notes = notes;
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 
-    public Exercise getExercise() {
-        return exercise;
+    public String getExerciseName() {
+        return exerciseName;
     }
 
-    public void setExercise(Exercise exercise) {
-        this.exercise = exercise;
+    public void setExerciseName(String exerciseName) {
+        this.exerciseName = exerciseName;
     }
 
     public int getSets() {

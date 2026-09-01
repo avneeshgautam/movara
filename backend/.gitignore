@@ -4,3 +4,9 @@ target/
 *.iml
 .vscode/
 .DS_Store
+
+# Local secrets — never commit. Holds the real MONGODB_URI for dev.
+run-local.sh
+.env
+.env.local
+application-local.yml

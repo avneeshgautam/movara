@@ -4,7 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:movara_app/models/workout_entry.dart';
 import 'package:movara_app/widgets/workout_entry_card.dart';
 
+import 'test_setup.dart';
+
 void main() {
+  setUpAll(disableGoogleFontsNetwork);
+
   group('WorkoutEntry', () {
     test('serializes performedAt as a plain ISO date', () {
       final entry = WorkoutEntry(
@@ -20,7 +24,7 @@ void main() {
 
     test('round-trips through JSON', () {
       final json = {
-        'id': 7,
+        'id': 'abc123',
         'exerciseName': 'Bench Press',
         'sets': 4,
         'reps': 8,
@@ -31,7 +35,7 @@ void main() {
 
       final entry = WorkoutEntry.fromJson(json);
 
-      expect(entry.id, 7);
+      expect(entry.id, 'abc123');
       expect(entry.exerciseName, 'Bench Press');
       expect(entry.sets, 4);
       expect(entry.reps, 8);
@@ -42,7 +46,7 @@ void main() {
 
     test('tolerates a missing weight', () {
       final entry = WorkoutEntry.fromJson({
-        'id': 1,
+        'id': 'xyz789',
         'exerciseName': 'Push-ups',
         'sets': 3,
         'reps': 20,

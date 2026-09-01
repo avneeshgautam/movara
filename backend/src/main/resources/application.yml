@@ -6,24 +6,17 @@ spring:
   application:
     name: movara-backend
 
-  datasource:
-    url: jdbc:h2:mem:movara;DB_CLOSE_DELAY=-1
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: ""
-
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
+  data:
+    mongodb:
+      # Full connection string, INCLUDING the database name, e.g.
+      #   mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/movara?retryWrites=true&w=majority
+      # Never commit the real value -- it holds your password. Set it via the
+      # MONGODB_URI environment variable (locally and on Render).
+      # The localhost fallback is only for a local mongod during development.
+      uri: ${MONGODB_URI:mongodb://localhost:27017/movara}
+      # Honor @Indexed annotations (off by default in Spring Boot 3) so the
+      # unique index on Exercise.name is actually created.
+      auto-index-creation: true
 
 # Origins allowed to call the API, comma separated.
 # In production set ALLOWED_ORIGINS to your deployed frontend, e.g.
