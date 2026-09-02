@@ -177,13 +177,11 @@ class _ExerciseCard extends StatefulWidget {
 }
 
 class _ExerciseCardState extends State<_ExerciseCard> {
-  late final int _defaultCount;
   late List<_SetState> _sets;
 
   @override
   void initState() {
     super.initState();
-    _defaultCount = widget.exercise.sets.length;
     _sets = widget.exercise.sets
         .map((s) => _SetState(reps: s.reps, weight: s.weight))
         .toList();
@@ -220,6 +218,38 @@ class _ExerciseCardState extends State<_ExerciseCard> {
       final w = (_sets[i].weight + delta).clamp(0, 999).toDouble();
       _sets[i].weight = double.parse(w.toStringAsFixed(1));
     });
+  }
+
+  Future<void> _editReps(int i) async {
+    final controller = TextEditingController(text: '${_sets[i].reps}');
+    final c = context.movara;
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: c.surface,
+        title: Text('Reps', style: AppTheme.display(color: c.textPrimary, fontSize: 16)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(hintText: 'e.g. 10'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(context, int.tryParse(controller.text.trim())),
+            child: const Text('Set'),
+          ),
+        ],
+      ),
+    );
+    if (result != null && result > 0) {
+      setState(() => _sets[i].reps = result);
+    }
   }
 
   Future<void> _editWeight(int i) async {
@@ -476,12 +506,25 @@ class _ExerciseCardState extends State<_ExerciseCard> {
             ),
           ),
           Text('Reps ', style: TextStyle(color: c.textMuted, fontSize: 12)),
-          Text(
-            '${s.reps}',
-            style: AppTheme.display(
-              color: c.textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+          GestureDetector(
+            onTap: () => _editReps(i),
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 30),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: c.surface3,
+                border: Border.all(color: c.border),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '${s.reps}',
+                style: AppTheme.display(
+                  color: c.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
           const Spacer(),
@@ -519,7 +562,8 @@ class _ExerciseCardState extends State<_ExerciseCard> {
           ),
           const SizedBox(width: 6),
           _roundBtn(context, '+', () => _changeWeight(i, 0.5), c.accent),
-          if (i >= _defaultCount) ...[
+          // Removable down to a single set, so 1–2-set workouts are easy.
+          if (_sets.length > 1) ...[
             const SizedBox(width: 6),
             _roundBtn(context, '×', () => _removeSet(i), c.textMuted),
           ],
