@@ -1,0 +1,42 @@
+name: Deploy frontend to Cloudflare Pages
+
+# Builds the Flutter web app and deploys it to Cloudflare Pages on every push
+# that touches the frontend. Runs the Flutter build in CI (Cloudflare's own
+# build image has no Flutter), so the compiled app is always current.
+#
+# One-time setup: add a repository secret CLOUDFLARE_API_TOKEN
+#   (GitHub repo -> Settings -> Secrets and variables -> Actions).
+# The token needs the "Cloudflare Pages: Edit" permission.
+
+on:
+  push:
+    branches: [first-build]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Build web
+        working-directory: frontend
+        run: |
+          flutter pub get
+          flutter build web --release \
+            --dart-define=API_BASE_URL=https://movara-backend-h22y.onrender.com/api
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Account id is not secret (it appears in dashboard URLs).
+          accountId: 65ade6a68860ad7b630077ff6f3e4f5c
+          command: pages deploy frontend/build/web --project-name=movara-9ol
