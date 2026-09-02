@@ -67,31 +67,37 @@ void main() {
   });
 
   group('WorkoutTab', () {
-    testWidgets('shows the log and the Log a set button', (tester) async {
+    testWidgets('shows the category session, not the dashboard', (tester) async {
       await tester.pumpWidget(wrap(WorkoutTab(
         api: ApiService(),
-        entriesFuture: Future.value(sampleEntries),
         onReload: () async {},
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Log a set'), findsOneWidget);
-      expect(find.text('WORKOUT LOG'), findsOneWidget);
-      expect(find.text('Squats'), findsOneWidget);
+      // Session header + category tabs + first exercise.
+      expect(find.text('Workout'), findsOneWidget);
+      expect(find.text('Chest'), findsOneWidget);
+      expect(find.text('Bench Press'), findsOneWidget);
+      expect(find.text('Demo'), findsWidgets);
 
-      // The dashboard sections do not appear here.
+      // The dashboard sections belong to the Home tab only.
       expect(find.text("TODAY'S OVERVIEW"), findsNothing);
     });
 
-    testWidgets('shows an empty state when there are no sets', (tester) async {
+    testWidgets('switching category swaps the exercise list', (tester) async {
       await tester.pumpWidget(wrap(WorkoutTab(
         api: ApiService(),
-        entriesFuture: Future.value(const <WorkoutEntry>[]),
         onReload: () async {},
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('No sets logged yet'), findsOneWidget);
+      expect(find.text('Bench Press'), findsOneWidget);
+
+      await tester.tap(find.text('Legs'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Barbell Squat'), findsOneWidget);
+      expect(find.text('Bench Press'), findsNothing);
     });
   });
 }

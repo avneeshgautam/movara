@@ -68,11 +68,7 @@ class _HomeShellState extends State<HomeShell> {
               index: _index,
               children: [
                 HomeTab(entriesFuture: _entriesFuture, onReload: _reload),
-                WorkoutTab(
-                  api: _api,
-                  entriesFuture: _entriesFuture,
-                  onReload: _reload,
-                ),
+                WorkoutTab(api: _api, onReload: _reload),
                 const _ComingSoon(
                   emoji: '🏃',
                   title: 'Running',
