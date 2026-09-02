@@ -123,6 +123,11 @@ class _WorkoutSessionState extends State<WorkoutSession> {
                     itemCount: exercises.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 16),
                     itemBuilder: (context, i) => _ExerciseCard(
+                      // Key by exercise id so each card keeps its own set
+                      // state — without it Flutter reuses a card's State by
+                      // list position, leaking "done" toggles across
+                      // exercises when the category changes.
+                      key: ValueKey(exercises[i].id),
                       exercise: exercises[i],
                       onLogSet: widget.onLogSet,
                       onUnlogSet: widget.onUnlogSet,
@@ -163,6 +168,7 @@ class _EmptyCategory extends StatelessWidget {
 
 class _ExerciseCard extends StatefulWidget {
   const _ExerciseCard({
+    super.key,
     required this.exercise,
     required this.onLogSet,
     required this.onUnlogSet,

@@ -49,6 +49,13 @@ class _HomeShellState extends State<HomeShell> {
     await _entriesFuture;
   }
 
+  void _onTab(int i) {
+    setState(() => _index = i);
+    // Re-fetch when opening Home so its stats reflect sets just logged on the
+    // Workout tab, even if the live refresh was missed.
+    if (i == 0) _reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.movara;
@@ -86,7 +93,7 @@ class _HomeShellState extends State<HomeShell> {
       ),
       bottomNavigationBar: _TabBar(
         index: _index,
-        onChanged: (i) => setState(() => _index = i),
+        onChanged: _onTab,
       ),
     );
   }
