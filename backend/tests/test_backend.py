@@ -70,6 +70,40 @@ class TestDateStorage:
             db.from_bson_date(12345)
 
 
+class TestIndexSetup:
+    """Index creation must never take the service down.
+
+    Regression: the Java backend left a unique index named "name" on Atlas.
+    PyMongo defaults to "name_1", so Mongo raised IndexOptionsConflict and the
+    app crash-looped on startup.
+    """
+
+    def test_uses_the_same_index_name_spring_used(self, monkeypatch):
+        captured: dict = {}
+
+        def fake_create_index(keys, **kwargs):
+            captured.update(kwargs)
+            return "name"
+
+        monkeypatch.setattr(db.exercises, "create_index", fake_create_index)
+        db._ensure_name_index()
+
+        assert captured["name"] == "name"
+        assert captured["unique"] is True
+
+    def test_conflicting_index_is_survivable(self, monkeypatch):
+        from pymongo.errors import OperationFailure
+
+        def conflict(*args, **kwargs):
+            raise OperationFailure(
+                "Index already exists with a different name: name_1", 85
+            )
+
+        monkeypatch.setattr(db.exercises, "create_index", conflict)
+        # Must not raise — including from the logging call itself.
+        db._ensure_name_index()
+
+
 class TestCorsSettings:
     """ALLOWED_ORIGINS keeps Spring's allowedOriginPatterns semantics."""
 
