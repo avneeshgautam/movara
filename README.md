@@ -6,7 +6,7 @@ A simple workout tracker: log how many reps and sets you did per exercise.
 ## Structure
 
 ```
-backend/    Spring Boot REST API (Java 17, H2 in-memory DB for now)
+backend/    FastAPI REST API (Python, MongoDB Atlas)
 frontend/   Flutter app (mobile + web) that talks to the backend
 ```
 
@@ -17,7 +17,7 @@ See [backend/README.md](backend/README.md) and
 
 ```bash
 # Terminal 1
-cd backend && mvn spring-boot:run
+cd backend && ./run-local.sh          # or: .venv/bin/uvicorn app.main:app --reload
 
 # Terminal 2
 cd frontend && flutter run -d chrome

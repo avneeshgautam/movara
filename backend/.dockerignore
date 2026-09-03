@@ -1,7 +1,10 @@
-target/
-.mvn/
-mvnw
-mvnw.cmd
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+tests/
+requirements-dev.txt
+run-local.sh
 .idea/
 *.iml
 .git/

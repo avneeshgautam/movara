@@ -4,8 +4,8 @@
 # This file MUST live at the repository root -- Render only looks for it
 # there. `rootDir` below is what points the service at the backend/ folder.
 #
-# Render has no native `java` runtime, so this builds via Docker
-# (backend/Dockerfile), which also pins the JDK version explicitly.
+# The service is a FastAPI (Python) app built via Docker
+# (backend/Dockerfile), which pins the Python version explicitly.
 #
 # Data lives in MongoDB Atlas (see MONGODB_URI below), so it now PERSISTS
 # across the free plan's sleeps and redeploys. The plan still sleeps after

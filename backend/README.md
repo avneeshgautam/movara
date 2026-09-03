@@ -1,73 +1,94 @@
 # Movara backend
 
-Spring Boot 3 / Java 17 REST API for logging workouts (sets, reps, weight per exercise).
+FastAPI + MongoDB REST API for logging workouts (sets, reps, weight per
+exercise). Python was chosen over the original Java/Spring Boot service so
+ML work can live alongside the API later.
 
 ## Run
 
-Requires a local Maven install (`brew install maven`) and Java 17+, plus a
-MongoDB to point at — either MongoDB Atlas (cloud) or a local `mongod`.
+Requires Python 3.12+ and a MongoDB to point at — MongoDB Atlas or a local
+`mongod`.
 
 ```bash
 cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 
 # Option A: local mongod (mongodb://localhost:27017/movara is the default)
-mvn spring-boot:run
+.venv/bin/uvicorn app.main:app --reload --port 8080
 
-# Option B: your Atlas cluster (do NOT paste the URI into any file)
-MONGODB_URI="mongodb+srv://USER:PASS@cluster0.xxxx.mongodb.net/movara" mvn spring-boot:run
+# Option B: your Atlas cluster (do NOT paste the URI into any committed file)
+MONGODB_URI="mongodb+srv://USER:PASS@cluster0.xxxx.mongodb.net/movara" \
+  .venv/bin/uvicorn app.main:app --reload --port 8080
 ```
 
-The API comes up on `http://localhost:8080`. Data is stored in MongoDB and
-**persists** across restarts. The connection string is read from the
-`MONGODB_URI` environment variable (see `src/main/resources/application.yml`);
-it holds your password, so it is never committed.
+Or copy your URI into the gitignored `run-local.sh` and just run `./run-local.sh`.
+
+Interactive API docs are served at `http://localhost:8080/docs`.
 
 ## Endpoints
 
-| Method | Path                       | Description                                   |
-|--------|----------------------------|------------------------------------------------|
-| GET    | `/api/exercises`           | List all exercises                              |
-| POST   | `/api/exercises`           | Create an exercise `{ name, category }`         |
-| GET    | `/api/workout-entries`     | List logged sets, newest first (`?date=` filter)|
-| POST   | `/api/workout-entries`     | Log a set `{ exerciseName, sets, reps, weightKg, performedAt, notes }` |
-| DELETE | `/api/workout-entries/{id}`| Delete a logged set                             |
+Identical to the previous Java service — the Flutter client needs no changes.
 
-A few exercises (Push-ups, Squats, Bench Press, ...) are seeded on first run
-— see `ExerciseSeeder`.
+| Method | Path                        | Description                                     |
+|--------|-----------------------------|-------------------------------------------------|
+| GET    | `/api/exercises`            | List all exercises                               |
+| POST   | `/api/exercises`            | Create an exercise `{ name, category }` (existing name is returned, not duplicated) |
+| GET    | `/api/workout-entries`      | List logged sets, newest first (`?date=` filter) |
+| POST   | `/api/workout-entries`      | Log a set `{ exerciseName, sets, reps, weightKg, performedAt, notes }` |
+| DELETE | `/api/workout-entries/{id}` | Delete a logged set                              |
+
+IDs are MongoDB ObjectId strings. Invalid payloads return **400** (FastAPI's
+default 422 is remapped) to match the old contract.
+
+A few exercises (Push-ups, Squats, Bench Press, ...) are seeded on first run.
 
 ## Layout
 
 ```
-exercise/   Exercise document, repository, controller
-workout/    WorkoutEntry document + DTOs, repository, service, controller
-config/     CORS setup for the Flutter client
+app/
+  main.py       FastAPI app, CORS, validation-error mapping
+  config.py     Environment configuration
+  db.py         Mongo client, indexes, seeding, date coercion
+  models.py     Pydantic request/response models
+  routers/      exercises.py, workout_entries.py
+tests/          Tests that need no database
 ```
 
-Documents are stored in two collections: `exercises` (backs the autocomplete
-list, unique index on `name`) and `workout_entries` (each set, with the
-exercise name stored denormalized -- MongoDB has no SQL joins). IDs are Mongo
-ObjectId strings.
+Two collections: `exercises` (unique index on `name`, backs autocomplete) and
+`workout_entries` (one document per logged set, with the exercise name stored
+denormalized — MongoDB has no SQL joins).
+
+`performedAt` is stored as a BSON date at midnight, the same mapping Spring
+Data used for `LocalDate`, so documents written by the old Java backend are
+read and written unchanged.
+
+## Test
+
+```bash
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest tests -q
+```
+
+These cover validation, date coercion and CORS pattern handling without
+needing a database. Full CRUD was verified against a real local `mongod`.
 
 ## Deploy
 
-Built as a Docker image ([Dockerfile](Dockerfile)) — Render has no native
-Java runtime. The blueprint is [render.yaml](../render.yaml) at the **repo
-root** (Render only looks there; its `rootDir: backend` points back here).
+Built as a Docker image ([Dockerfile](Dockerfile)) — the blueprint is
+[render.yaml](../render.yaml) at the **repo root**, with `rootDir: backend`.
 
-Configured entirely by environment variable:
-
-| Variable          | Purpose                                            |
-|-------------------|----------------------------------------------------|
+| Variable          | Purpose                                                |
+|-------------------|--------------------------------------------------------|
 | `MONGODB_URI`     | MongoDB connection string, including the `/movara` db name |
-| `PORT`            | Injected by the host; defaults to 8080 locally      |
-| `ALLOWED_ORIGINS` | Comma-separated CORS origins for the deployed frontend |
+| `PORT`            | Injected by the host; defaults to 8080 locally          |
+| `ALLOWED_ORIGINS` | Comma-separated CORS origins; `*` wildcards supported   |
 
 ⚠️ There is no authentication yet — anyone with the URL can read or delete
-entries. Data now persists in MongoDB, so an open API means persistent data
-anyone can modify. Add auth before sharing the URL.
+entries. Add auth before sharing the URL.
 
 ## Next steps
 
-- Add auth (Spring Security + JWT) once there's more than one user.
-- Add `WorkoutEntryServiceTest` / `WorkoutEntryControllerTest` with
-  `spring-boot-starter-test` (already on the classpath).
+- Add auth (e.g. FastAPI security dependencies) once there's more than one user.
+- ML: with Python in place, training/inference can live in this service or a
+  sibling module sharing the same MongoDB.

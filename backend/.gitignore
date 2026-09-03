@@ -1,5 +1,7 @@
-target/
-!.mvn/wrapper/maven-wrapper.jar
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
 .idea/
 *.iml
 .vscode/
@@ -9,4 +11,3 @@ target/
 run-local.sh
 .env
 .env.local
-application-local.yml
