@@ -17,3 +17,6 @@ movara-web.zip
 # `flutter create .` — see frontend/README.md — and should be committed
 # once they exist, so they're intentionally not ignored here.
 
+
+# Firebase client config — kept out of git so secret scanners stay quiet.
+firebase.env
