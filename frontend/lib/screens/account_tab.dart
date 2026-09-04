@@ -11,18 +11,28 @@ import '../theme/movara_colors.dart';
 /// Body stats, goals, badges and the settings menu are still local/placeholder
 /// state — there is no data source for them yet (see the TODOs).
 class AccountTab extends StatefulWidget {
-  const AccountTab({super.key, required this.entriesFuture});
+  const AccountTab({
+    super.key,
+    required this.entriesFuture,
+    this.displayName = 'Athlete',
+    this.email,
+    this.photoUrl,
+    this.onSignOut,
+  });
 
   final Future<List<WorkoutEntry>> entriesFuture;
+  final String displayName;
+  final String? email;
+  final String? photoUrl;
+  final Future<void> Function()? onSignOut;
 
   @override
   State<AccountTab> createState() => _AccountTabState();
 }
 
 class _AccountTabState extends State<AccountTab> {
-  // TODO: replace with the signed-in user once auth exists.
-  static const _name = 'Avneesh';
-  static const _handle = '@avneesh · Member since 2022';
+  String get _name => widget.displayName;
+  String get _handle => widget.email ?? 'Signed in';
 
   // Local-only for now; nothing persists these yet.
   final Map<String, double> _body = {
@@ -141,14 +151,30 @@ class _AccountTabState extends State<AccountTab> {
                           BoxShadow(color: c.accentGlow, blurRadius: 20),
                         ],
                       ),
-                      child: Text(
-                        _name.isEmpty ? '?' : _name[0].toUpperCase(),
-                        style: AppTheme.display(
-                          color: c.accent,
-                          fontSize: 30,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: widget.photoUrl != null
+                          ? Image.network(
+                              widget.photoUrl!,
+                              width: 76,
+                              height: 76,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Text(
+                                _name.isEmpty ? '?' : _name[0].toUpperCase(),
+                                style: AppTheme.display(
+                                  color: c.accent,
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            )
+                          : Text(
+                              _name.isEmpty ? '?' : _name[0].toUpperCase(),
+                              style: AppTheme.display(
+                                color: c.accent,
+                                fontSize: 30,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                     ),
                     Positioned(
                       right: -2,
@@ -693,7 +719,11 @@ class _AccountTabState extends State<AccountTab> {
           : null,
       child: InkWell(
         // TODO: wire these up as the corresponding screens are built.
-        onTap: item.toggle ? null : () {},
+        onTap: item.toggle
+            ? null
+            : item.label == 'Sign Out'
+                ? () => widget.onSignOut?.call()
+                : () {},
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(

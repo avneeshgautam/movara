@@ -27,6 +27,11 @@ ALLOWED_ORIGINS = os.getenv(
 )
 
 
+# Firebase project id used to validate ID tokens. Public (it appears in the
+# client config too); auth is rejected outright when this is unset.
+FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "")
+
+
 def cors_settings() -> dict:
     """Translate the ALLOWED_ORIGINS patterns into CORSMiddleware kwargs.
 

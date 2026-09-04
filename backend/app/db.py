@@ -31,10 +31,30 @@ SEED_EXERCISES = [
 
 
 def init() -> None:
-    """Create indexes and seed starter exercises (idempotent)."""
+    """Create indexes, drop pre-auth data and seed exercises (idempotent)."""
     _ensure_name_index()
+
+    # Entries are always queried by owner (plus date), so index that.
+    workout_entries.create_index([("userId", ASCENDING), ("performedAt", ASCENDING)])
+
+    _drop_ownerless_entries()
+
     if exercises.count_documents({}, limit=1) == 0:
         exercises.insert_many([dict(e) for e in SEED_EXERCISES])
+
+
+def _drop_ownerless_entries() -> None:
+    """Remove entries written before accounts existed.
+
+    They have no owner, so no signed-in user could ever see them; leaving them
+    would just be invisible clutter. Idempotent -- once gone this is a no-op.
+    """
+    result = workout_entries.delete_many({"userId": {"$exists": False}})
+    if result.deleted_count:
+        logger.info(
+            "Removed %s pre-auth workout entries with no owner.",
+            result.deleted_count,
+        )
 
 
 def _ensure_name_index() -> None:

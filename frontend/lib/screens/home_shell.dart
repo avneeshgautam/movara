@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/workout_entry.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../services/reminder_scheduler.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
@@ -16,10 +17,12 @@ import 'workout_tab.dart';
 class HomeShell extends StatefulWidget {
   const HomeShell({
     super.key,
+    required this.auth,
     required this.isDark,
     required this.onToggleTheme,
   });
 
+  final AuthService auth;
   final bool isDark;
   final VoidCallback onToggleTheme;
 
@@ -28,7 +31,8 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  final _api = ApiService();
+  late final ApiService _api =
+      ApiService(tokenProvider: widget.auth.idToken);
   final _reminders = ReminderScheduler();
   int _index = 0;
 
@@ -55,6 +59,16 @@ class _HomeShellState extends State<HomeShell> {
     await _entriesFuture;
   }
 
+  /// Best available name for the signed-in user.
+  String get _displayName {
+    final user = widget.auth.currentUser;
+    final name = user?.displayName;
+    if (name != null && name.trim().isNotEmpty) return name.trim();
+    final email = user?.email;
+    if (email != null && email.contains('@')) return email.split('@').first;
+    return 'Athlete';
+  }
+
   void _onTab(int i) {
     setState(() => _index = i);
     // Re-fetch when opening Home so its stats reflect sets just logged on the
@@ -71,8 +85,7 @@ class _HomeShellState extends State<HomeShell> {
       body: Column(
         children: [
           MovaraHeader(
-            // TODO: replace with the signed-in user once auth exists.
-            username: 'Avneesh',
+            username: _displayName,
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
           ),
@@ -92,7 +105,13 @@ class _HomeShellState extends State<HomeShell> {
                   message: 'Route tracking and pace history will live here.',
                 ),
                 RemindersTab(scheduler: _reminders),
-                AccountTab(entriesFuture: _entriesFuture),
+                AccountTab(
+                  entriesFuture: _entriesFuture,
+                  displayName: _displayName,
+                  email: widget.auth.currentUser?.email,
+                  photoUrl: widget.auth.currentUser?.photoURL,
+                  onSignOut: widget.auth.signOut,
+                ),
               ],
             ),
           ),

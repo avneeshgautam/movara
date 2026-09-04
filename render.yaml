@@ -18,7 +18,7 @@ services:
     rootDir: backend
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    healthCheckPath: /api/exercises
+    healthCheckPath: /health
     envVars:
       # Your MongoDB Atlas connection string, INCLUDING the /movara database
       # name and password. sync:false keeps it out of git -- set the real
@@ -28,4 +28,8 @@ services:
       # Set this to your deployed frontend origin, e.g.
       # https://movara-9ol.pages.dev  (no trailing slash)
       - key: ALLOWED_ORIGINS
+        sync: false
+      # Firebase project id used to verify ID tokens. Not a secret (it also
+      # ships in the client config), but set per-environment.
+      - key: FIREBASE_PROJECT_ID
         sync: false

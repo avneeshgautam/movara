@@ -62,5 +62,15 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     )
 
 
+@app.get("/health", tags=["health"])
+def health() -> dict:
+    """Unauthenticated liveness probe.
+
+    The API endpoints now require a bearer token, so the platform health check
+    must target this instead of /api/exercises.
+    """
+    return {"status": "ok"}
+
+
 app.include_router(exercises.router)
 app.include_router(workout_entries.router)

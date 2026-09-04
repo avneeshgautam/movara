@@ -39,15 +39,19 @@ class TestValidation:
             ),
         ],
     )
-    def test_invalid_payload_is_400(self, payload):
-        assert client.post("/api/workout-entries", json=payload).status_code == 400
+    def test_invalid_payload_is_400(self, payload, auth_headers):
+        response = client.post(
+            "/api/workout-entries", json=payload, headers=auth_headers
+        )
+        assert response.status_code == 400
 
-    def test_error_body_is_json_serialisable(self):
+    def test_error_body_is_json_serialisable(self, auth_headers):
         """Regression: a custom validator puts the raw ValueError in "ctx",
         which used to break serialization and turn the 400 into a 500."""
         response = client.post(
             "/api/workout-entries",
             json={"exerciseName": "   ", "sets": 1, "reps": 5, "performedAt": "2026-09-02"},
+            headers=auth_headers,
         )
         assert response.status_code == 400
         detail = response.json()["detail"]

@@ -1,8 +1,9 @@
 import re
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 
 from .. import db
+from ..auth import current_uid
 from ..models import ExerciseResponse, NewExerciseRequest
 
 router = APIRouter()
@@ -24,7 +25,7 @@ def find_by_name_ignore_case(name: str) -> dict | None:
 
 
 @router.get("/api/exercises", response_model=list[ExerciseResponse])
-def list_exercises() -> list[ExerciseResponse]:
+def list_exercises(uid: str = Depends(current_uid)) -> list[ExerciseResponse]:
     return [_to_response(d) for d in db.exercises.find()]
 
 
@@ -33,7 +34,10 @@ def list_exercises() -> list[ExerciseResponse]:
     response_model=ExerciseResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_exercise(request: NewExerciseRequest) -> ExerciseResponse:
+def create_exercise(
+    request: NewExerciseRequest,
+    uid: str = Depends(current_uid),
+) -> ExerciseResponse:
     # Matches the Java behaviour: an existing name is returned rather than
     # duplicated, and the status is still 201.
     existing = find_by_name_ignore_case(request.name)

@@ -2,17 +2,17 @@ from datetime import date
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pymongo import DESCENDING
 
 from .. import db
+from ..auth import current_uid
 from ..models import WorkoutEntryRequest, WorkoutEntryResponse
 from .exercises import find_by_name_ignore_case
 
 router = APIRouter()
 
-# Newest first: same ordering as the Java repository's
-# findAllByOrderByPerformedAtDescIdDesc.
+# Newest first: same ordering the Java repository used.
 _SORT = [("performedAt", DESCENDING), ("_id", DESCENDING)]
 
 
@@ -30,10 +30,11 @@ def _to_response(doc: dict) -> WorkoutEntryResponse:
 
 @router.get("/api/workout-entries", response_model=list[WorkoutEntryResponse])
 def list_entries(
+    uid: str = Depends(current_uid),
     date_filter: date | None = Query(default=None, alias="date"),
 ) -> list[WorkoutEntryResponse]:
-    """Optionally filter with ?date=2026-09-01, otherwise everything, newest first."""
-    query: dict = {}
+    """The caller's own entries, newest first. Optional ?date=2026-09-01."""
+    query: dict = {"userId": uid}
     if date_filter is not None:
         query["performedAt"] = db.to_bson_date(date_filter)
 
@@ -45,10 +46,12 @@ def list_entries(
     response_model=WorkoutEntryResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_entry(request: WorkoutEntryRequest) -> WorkoutEntryResponse:
-    # Keep the exercises collection populated for the autocomplete list, but
-    # store the name directly on the entry (denormalized) -- MongoDB has no
-    # SQL-style joins, and this matches the existing documents.
+def create_entry(
+    request: WorkoutEntryRequest,
+    uid: str = Depends(current_uid),
+) -> WorkoutEntryResponse:
+    # The exercises collection is a shared catalogue backing autocomplete; the
+    # entry itself is owned by the caller.
     existing = find_by_name_ignore_case(request.exerciseName)
     if existing:
         exercise_name = existing["name"]
@@ -57,6 +60,7 @@ def create_entry(request: WorkoutEntryRequest) -> WorkoutEntryResponse:
         db.exercises.insert_one({"name": exercise_name, "category": None})
 
     doc = {
+        "userId": uid,
         "exerciseName": exercise_name,
         "sets": request.sets,
         "reps": request.reps,
@@ -69,12 +73,12 @@ def create_entry(request: WorkoutEntryRequest) -> WorkoutEntryResponse:
 
 
 @router.delete("/api/workout-entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_entry(entry_id: str) -> Response:
+def delete_entry(entry_id: str, uid: str = Depends(current_uid)) -> Response:
     try:
         object_id = ObjectId(entry_id)
     except (InvalidId, TypeError):
         raise HTTPException(status_code=404, detail="Not found") from None
 
-    # Deleting a missing id is a no-op, as it was in the Java version.
-    db.workout_entries.delete_one({"_id": object_id})
+    # Scoped by userId so one account cannot delete another's entry.
+    db.workout_entries.delete_one({"_id": object_id, "userId": uid})
     return Response(status_code=status.HTTP_204_NO_CONTENT)

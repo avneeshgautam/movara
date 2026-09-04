@@ -1,0 +1,10 @@
+.DS_Store
+.idea/
+*.iml
+
+# Stray npm artifacts from running `npx wrangler` / `npm install firebase`
+# at the repo root. The Flutter app uses the Dart Firebase packages, so the
+# JS SDK here is unused and must not be committed.
+node_modules/
+package.json
+package-lock.json
