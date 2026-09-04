@@ -7,11 +7,18 @@ import 'workout_session.dart';
 /// The Workout tab: a category-based exercise session (see [WorkoutSession]).
 ///
 /// Marking a set "done" logs it to the backend so the Home dashboard's streak
-/// and weekly stats stay in sync; un-checking removes that logged set.
+/// and weekly stats stay in sync; un-checking removes that logged set. Today's
+/// entries are passed down so completed sets survive a refresh.
 class WorkoutTab extends StatelessWidget {
-  const WorkoutTab({super.key, required this.api, required this.onReload});
+  const WorkoutTab({
+    super.key,
+    required this.api,
+    required this.entriesFuture,
+    required this.onReload,
+  });
 
   final ApiService api;
+  final Future<List<WorkoutEntry>> entriesFuture;
   final Future<void> Function() onReload;
 
   Future<String?> _logSet(String exerciseName, int reps, double weightKg) async {
@@ -35,12 +42,21 @@ class WorkoutTab extends StatelessWidget {
       await api.deleteWorkoutEntry(entryId);
       await onReload();
     } catch (_) {
-      // Best-effort; the Home stats will reconcile on next reload.
+      // Best-effort; the next reload reconciles.
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return WorkoutSession(onLogSet: _logSet, onUnlogSet: _unlogSet);
+    return FutureBuilder<List<WorkoutEntry>>(
+      future: entriesFuture,
+      builder: (context, snapshot) {
+        return WorkoutSession(
+          entries: snapshot.data ?? const <WorkoutEntry>[],
+          onLogSet: _logSet,
+          onUnlogSet: _unlogSet,
+        );
+      },
+    );
   }
 }

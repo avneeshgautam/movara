@@ -70,6 +70,7 @@ void main() {
     testWidgets('shows the category session, not the dashboard', (tester) async {
       await tester.pumpWidget(wrap(WorkoutTab(
         api: ApiService(),
+        entriesFuture: Future.value(const <WorkoutEntry>[]),
         onReload: () async {},
       )));
       await tester.pumpAndSettle();
@@ -87,6 +88,7 @@ void main() {
     testWidgets('switching category swaps the exercise list', (tester) async {
       await tester.pumpWidget(wrap(WorkoutTab(
         api: ApiService(),
+        entriesFuture: Future.value(const <WorkoutEntry>[]),
         onReload: () async {},
       )));
       await tester.pumpAndSettle();
@@ -98,6 +100,46 @@ void main() {
 
       expect(find.text('Barbell Squat'), findsOneWidget);
       expect(find.text('Bench Press'), findsNothing);
+    });
+  });
+
+  group('completed sets persist for the day', () {
+    WorkoutEntry loggedBenchPress(DateTime when) => WorkoutEntry(
+          id: 'logged-1',
+          exerciseName: 'Bench Press',
+          sets: 1,
+          reps: 8,
+          weightKg: 40,
+          performedAt: when,
+        );
+
+    testWidgets("today's logged set shows as ticked on a fresh mount",
+        (tester) async {
+      await tester.pumpWidget(wrap(WorkoutTab(
+        api: ApiService(),
+        entriesFuture: Future.value([loggedBenchPress(DateTime.now())]),
+        onReload: () async {},
+      )));
+      await tester.pumpAndSettle();
+
+      // Bench Press ships with 3 default sets; one is logged today.
+      expect(find.text('1 / 3'), findsOneWidget);
+      expect(find.byIcon(Icons.check), findsOneWidget);
+    });
+
+    testWidgets("yesterday's set does not carry over", (tester) async {
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      await tester.pumpWidget(wrap(WorkoutTab(
+        api: ApiService(),
+        entriesFuture: Future.value([loggedBenchPress(yesterday)]),
+        onReload: () async {},
+      )));
+      await tester.pumpAndSettle();
+
+      // Several exercises all read "0 / 3"; what matters is that nothing is
+      // ticked and Bench Press did not keep yesterday's progress.
+      expect(find.text('1 / 3'), findsNothing);
+      expect(find.byIcon(Icons.check), findsNothing);
     });
   });
 }

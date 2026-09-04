@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/workout_entry.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 
@@ -7,15 +8,19 @@ import '../theme/movara_colors.dart';
 /// design: horizontal category tabs, exercise cards with per-set reps/weight
 /// tracking and a step-by-step demo sheet.
 ///
-/// Reps, weight and set add/remove are local session state (as in the source).
-/// Marking a set "done" logs it to the backend via [onLogSet]; un-checking
-/// removes it via [onUnlogSet], so the Home dashboard stays in sync.
+/// Completed sets are reconstructed from the entries logged today, so ticks
+/// survive a page refresh and moving between categories, and clear on their
+/// own tomorrow. Reps/weight edits on not-yet-logged sets stay local.
 class WorkoutSession extends StatefulWidget {
   const WorkoutSession({
     super.key,
+    required this.entries,
     required this.onLogSet,
     required this.onUnlogSet,
   });
+
+  /// All logged entries; only today's are used to restore ticks.
+  final List<WorkoutEntry> entries;
 
   /// Logs a completed set; returns the created entry id (or null on failure).
   final Future<String?> Function(String exerciseName, int reps, double weightKg)
@@ -41,10 +46,31 @@ class _WorkoutSessionState extends State<WorkoutSession> {
 
   String _active = 'Chest';
 
+  /// Today's entries per exercise name (lowercased), oldest first so they map
+  /// onto set 1, set 2, ... in the order they were completed.
+  Map<String, List<WorkoutEntry>> _loggedToday() {
+    final now = DateTime.now();
+    final grouped = <String, List<WorkoutEntry>>{};
+
+    for (final e in widget.entries) {
+      final d = e.performedAt;
+      if (d.year != now.year || d.month != now.month || d.day != now.day) {
+        continue;
+      }
+      grouped.putIfAbsent(e.exerciseName.toLowerCase(), () => []).add(e);
+    }
+    for (final list in grouped.values) {
+      // ObjectId hex is time-ordered, so ascending id == chronological.
+      list.sort((a, b) => (a.id ?? '').compareTo(b.id ?? ''));
+    }
+    return grouped;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.movara;
     final exercises = _workoutData[_active] ?? const [];
+    final loggedToday = _loggedToday();
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -129,6 +155,8 @@ class _WorkoutSessionState extends State<WorkoutSession> {
                       // exercises when the category changes.
                       key: ValueKey(exercises[i].id),
                       exercise: exercises[i],
+                      todayEntries:
+                          loggedToday[exercises[i].name.toLowerCase()] ?? const [],
                       onLogSet: widget.onLogSet,
                       onUnlogSet: widget.onUnlogSet,
                     ),
@@ -170,11 +198,13 @@ class _ExerciseCard extends StatefulWidget {
   const _ExerciseCard({
     super.key,
     required this.exercise,
+    required this.todayEntries,
     required this.onLogSet,
     required this.onUnlogSet,
   });
 
   final _Exercise exercise;
+  final List<WorkoutEntry> todayEntries;
   final Future<String?> Function(String, int, double) onLogSet;
   final Future<void> Function(String) onUnlogSet;
 
@@ -188,9 +218,57 @@ class _ExerciseCardState extends State<_ExerciseCard> {
   @override
   void initState() {
     super.initState();
-    _sets = widget.exercise.sets
-        .map((s) => _SetState(reps: s.reps, weight: s.weight))
-        .toList();
+    _sets = _merge(const []);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ExerciseCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Re-derive ticks whenever the day's logged entries change, so the server
+    // stays the source of truth for what is done.
+    if (_signature(oldWidget.todayEntries) != _signature(widget.todayEntries)) {
+      setState(() => _sets = _merge(_sets));
+    }
+  }
+
+  String _signature(List<WorkoutEntry> entries) =>
+      entries.map((e) => e.id ?? '').join(',');
+
+  /// Rebuild the set rows from today's logged entries.
+  ///
+  /// The first N rows mirror the N sets logged today (ticked, with the reps
+  /// and weight actually performed). Rows beyond that keep any local
+  /// reps/weight edits the user has made but are never left ticked.
+  List<_SetState> _merge(List<_SetState> current) {
+    final logged = widget.todayEntries;
+    final defaults = widget.exercise.sets;
+
+    // Keep however many rows the user is currently working with, but always
+    // show at least every set logged today.
+    final baseline = current.isEmpty ? defaults.length : current.length;
+    final total = logged.length > baseline ? logged.length : baseline;
+
+    final result = <_SetState>[];
+    for (var i = 0; i < total; i++) {
+      if (i < logged.length) {
+        final entry = logged[i];
+        result.add(
+          _SetState(reps: entry.reps, weight: entry.weightKg ?? 0)
+            ..done = true
+            ..loggedId = entry.id,
+        );
+      } else if (i < current.length) {
+        // Preserve local edits, but this row is not logged, so never ticked.
+        final existing = current[i]
+          ..done = false
+          ..loggedId = null;
+        result.add(existing);
+      } else {
+        final spec = i < defaults.length ? defaults[i] : defaults.last;
+        result.add(_SetState(reps: spec.reps, weight: spec.weight));
+      }
+    }
+    return result;
   }
 
   Future<void> _toggleDone(int i) async {
