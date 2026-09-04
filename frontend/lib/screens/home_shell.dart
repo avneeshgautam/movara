@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../models/workout_entry.dart';
 import '../services/api_service.dart';
+import '../services/reminder_scheduler.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 import '../widgets/movara_header.dart';
+import 'account_tab.dart';
 import 'home_tab.dart';
+import 'reminders_tab.dart';
 import 'workout_tab.dart';
 
 /// App shell: sticky header, tab content, and the bottom tab bar from the
@@ -26,6 +29,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   final _api = ApiService();
+  final _reminders = ReminderScheduler();
   int _index = 0;
 
   // Entry list lives here, shared by Home (stats) and Workout (log), so a
@@ -36,10 +40,12 @@ class _HomeShellState extends State<HomeShell> {
   void initState() {
     super.initState();
     _entriesFuture = _api.fetchWorkoutEntries();
+    _reminders.load();
   }
 
   @override
   void dispose() {
+    _reminders.dispose();
     _api.dispose();
     super.dispose();
   }
@@ -85,11 +91,8 @@ class _HomeShellState extends State<HomeShell> {
                   title: 'Running',
                   message: 'Route tracking and pace history will live here.',
                 ),
-                const _ComingSoon(
-                  emoji: '👤',
-                  title: 'Account',
-                  message: 'Profile, goals and preferences will live here.',
-                ),
+                RemindersTab(scheduler: _reminders),
+                AccountTab(entriesFuture: _entriesFuture),
               ],
             ),
           ),
@@ -113,6 +116,7 @@ class _TabBar extends StatelessWidget {
     (icon: Icons.home_outlined, label: 'Home'),
     (icon: Icons.fitness_center, label: 'Workout'),
     (icon: Icons.directions_run, label: 'Running'),
+    (icon: Icons.water_drop_outlined, label: 'Reminders'),
     (icon: Icons.person_outline, label: 'Account'),
   ];
 

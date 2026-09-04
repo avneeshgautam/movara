@@ -14,6 +14,10 @@ dependencies:
   cupertino_icons: ^1.0.8
   # Syne (display) + Inter (body), per the Figma design tokens.
   google_fonts: ^6.2.1
+  # Persists reminder settings across refreshes (localStorage on web).
+  shared_preferences: ^2.3.0
+  # Browser Notification API access for water reminders.
+  web: ^1.1.0
 
 dev_dependencies:
   flutter_test:

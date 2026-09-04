@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:movara_app/models/workout_entry.dart';
 import 'package:movara_app/services/api_service.dart';
+import 'package:movara_app/screens/account_tab.dart';
 import 'package:movara_app/screens/home_tab.dart';
 import 'package:movara_app/screens/workout_tab.dart';
 import 'package:movara_app/theme/app_theme.dart';
@@ -100,6 +101,63 @@ void main() {
 
       expect(find.text('Barbell Squat'), findsOneWidget);
       expect(find.text('Bench Press'), findsNothing);
+    });
+  });
+
+  group('AccountTab', () {
+    testWidgets('renders the profile sections', (tester) async {
+      await tester.pumpWidget(wrap(AccountTab(
+        entriesFuture: Future.value(const <WorkoutEntry>[]),
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('BODY STATS'), findsOneWidget);
+      expect(find.text('DAILY GOALS'), findsOneWidget);
+      expect(find.text('BADGES'), findsOneWidget);
+      // BMI computed from the default weight/height (74.5kg, 178cm).
+      expect(find.text('Normal'), findsOneWidget);
+    });
+
+    testWidgets('derives workout count and personal records from entries',
+        (tester) async {
+      final today = DateTime.now();
+      await tester.pumpWidget(wrap(AccountTab(
+        entriesFuture: Future.value([
+          WorkoutEntry(
+            id: 'a',
+            exerciseName: 'Bench Press',
+            sets: 1,
+            reps: 5,
+            weightKg: 80,
+            performedAt: today,
+          ),
+          WorkoutEntry(
+            id: 'b',
+            exerciseName: 'Bench Press',
+            sets: 1,
+            reps: 3,
+            weightKg: 100, // heavier -> this is the PR
+            performedAt: today,
+          ),
+        ]),
+      )));
+      await tester.pumpAndSettle();
+
+      // Both entries are the same day => one workout day.
+      expect(find.text('1'), findsWidgets);
+      // Best Bench Press lift only, not the lighter one.
+      expect(find.text('100 kg'), findsOneWidget);
+      expect(find.text('80 kg'), findsNothing);
+    });
+
+    testWidgets('shows an empty state when there are no records',
+        (tester) async {
+      await tester.pumpWidget(wrap(AccountTab(
+        entriesFuture: Future.value(const <WorkoutEntry>[]),
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No records yet'), findsOneWidget);
     });
   });
 
