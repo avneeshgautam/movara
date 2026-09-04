@@ -5,7 +5,7 @@ import '../services/reminder_scheduler.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 
-/// Water reminder settings: turn it on and pick how often it repeats.
+/// Water reminder settings: pick how often it repeats, then switch it on.
 class RemindersTab extends StatelessWidget {
   const RemindersTab({super.key, required this.scheduler});
 
@@ -40,10 +40,6 @@ class RemindersTab extends StatelessWidget {
               const SizedBox(height: 20),
               _waterCard(context),
               const SizedBox(height: 16),
-              if (scheduler.enabled) ...[
-                _intervalPicker(context),
-                const SizedBox(height: 16),
-              ],
               _statusCard(context),
             ],
           ),
@@ -56,26 +52,25 @@ class RemindersTab extends StatelessWidget {
     final c = context.movara;
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: c.surface,
-        border: Border.all(
-            color: scheduler.enabled ? c.accent : c.border),
+        border: Border.all(color: scheduler.enabled ? c.accent : c.border),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: 46,
+            height: 46,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: scheduler.enabled ? c.accentSoft : c.surface2,
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: const Text('💧', style: TextStyle(fontSize: 24)),
+            child: const Text('💧', style: TextStyle(fontSize: 22)),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -84,21 +79,23 @@ class RemindersTab extends StatelessWidget {
                   'Water Reminder',
                   style: AppTheme.display(
                     color: c.textPrimary,
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
-                  scheduler.enabled
-                      ? 'Every ${scheduler.intervalHours} '
-                          '${scheduler.intervalHours == 1 ? "hour" : "hours"}'
-                      : 'Off',
-                  style: TextStyle(color: c.textSecondary, fontSize: 12),
+                  scheduler.enabled ? 'On' : 'Off',
+                  style: TextStyle(color: c.textSecondary, fontSize: 11),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
+          // Timing control sits before the toggle so the interval is chosen
+          // first, then switched on.
+          _intervalDropdown(context),
+          const SizedBox(width: 10),
           _switch(
             context,
             scheduler.enabled,
@@ -109,58 +106,124 @@ class RemindersTab extends StatelessWidget {
     );
   }
 
-  Widget _intervalPicker(BuildContext context) {
+  Widget _intervalDropdown(BuildContext context) {
     final c = context.movara;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'REMIND ME EVERY',
-          style:
-              TextStyle(color: c.textMuted, fontSize: 10, letterSpacing: 1.6),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            for (final hours in ReminderScheduler.intervalOptions) ...[
-              if (hours != ReminderScheduler.intervalOptions.first)
+    return PopupMenuButton<int>(
+      tooltip: 'Reminder interval',
+      color: c.surface,
+      position: PopupMenuPosition.under,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      onSelected: (value) {
+        if (value == -1) {
+          _promptCustomInterval(context);
+        } else {
+          scheduler.setIntervalMinutes(value);
+        }
+      },
+      itemBuilder: (context) => [
+        for (final minutes in ReminderScheduler.intervalOptions)
+          PopupMenuItem<int>(
+            value: minutes,
+            child: Row(
+              children: [
+                Icon(
+                  scheduler.intervalMinutes == minutes
+                      ? Icons.check
+                      : Icons.schedule,
+                  size: 16,
+                  color: scheduler.intervalMinutes == minutes
+                      ? c.accent
+                      : c.textMuted,
+                ),
                 const SizedBox(width: 10),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => scheduler.setIntervalHours(hours),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: scheduler.intervalHours == hours
-                          ? c.accent
-                          : c.surface2,
-                      border: Border.all(
-                        color: scheduler.intervalHours == hours
-                            ? c.accent
-                            : c.border,
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Text(
-                      '$hours ${hours == 1 ? "hour" : "hours"}',
-                      style: AppTheme.display(
-                        color: scheduler.intervalHours == hours
-                            ? Colors.white
-                            : c.textSecondary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                Text(
+                  formatInterval(minutes),
+                  style: TextStyle(
+                    color: c.textPrimary,
+                    fontWeight: scheduler.intervalMinutes == minutes
+                        ? FontWeight.w700
+                        : FontWeight.w400,
                   ),
                 ),
-              ),
+              ],
+            ),
+          ),
+        const PopupMenuDivider(),
+        PopupMenuItem<int>(
+          value: -1,
+          child: Row(
+            children: [
+              Icon(Icons.edit_outlined, size: 16, color: c.textMuted),
+              const SizedBox(width: 10),
+              Text('Custom…', style: TextStyle(color: c.textPrimary)),
             ],
-          ],
+          ),
         ),
       ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: c.surface2,
+          border: Border.all(color: c.border),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              scheduler.intervalLabel,
+              style: AppTheme.display(
+                color: c.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 3),
+            Icon(Icons.arrow_drop_down, size: 18, color: c.textMuted),
+          ],
+        ),
+      ),
     );
+  }
+
+  Future<void> _promptCustomInterval(BuildContext context) async {
+    final c = context.movara;
+    final controller =
+        TextEditingController(text: '${scheduler.intervalMinutes}');
+
+    final minutes = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: c.surface,
+        title: Text('Remind me every',
+            style: AppTheme.display(color: c.textPrimary, fontSize: 16)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            hintText: 'e.g. 30',
+            suffixText: 'minutes',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(context, int.tryParse(controller.text.trim())),
+            child: const Text('Set'),
+          ),
+        ],
+      ),
+    );
+
+    if (minutes != null && minutes > 0) {
+      await scheduler.setIntervalMinutes(minutes);
+    }
   }
 
   Widget _statusCard(BuildContext context) {
@@ -178,7 +241,18 @@ class RemindersTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Icon(Icons.repeat, size: 16, color: c.textMuted),
+              const SizedBox(width: 8),
+              Text(
+                'Every ${scheduler.intervalLabel}',
+                style: TextStyle(color: c.textSecondary, fontSize: 13),
+              ),
+            ],
+          ),
           if (scheduler.enabled && due != null) ...[
+            const SizedBox(height: 8),
             Row(
               children: [
                 Icon(Icons.schedule, size: 16, color: c.accent),
@@ -189,8 +263,8 @@ class RemindersTab extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
           ],
+          const SizedBox(height: 12),
           if (blocked)
             _note(
               context,
