@@ -7,14 +7,13 @@ service keeps working with the same environment variables.
 import os
 import re
 
-# Full MongoDB connection string, INCLUDING the database name, e.g.
-#   mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/movara
-# It holds a password, so it is never committed -- set MONGODB_URI instead.
-# The localhost fallback is only for a local mongod during development.
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/movara")
-
-# Used when the URI carries no database name.
-DEFAULT_DB_NAME = "movara"
+# PostgreSQL connection string, e.g. the URI Supabase shows under
+#   Project Settings -> Database -> Connection string
+# It holds a password, so it is never committed -- set DATABASE_URL instead.
+# The localhost fallback is only for a local Postgres during development.
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/movara"
+)
 
 # Hosts like Render inject the port to bind. Falls back to 8080 locally.
 PORT = int(os.getenv("PORT", "8080"))

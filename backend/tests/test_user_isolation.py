@@ -1,13 +1,15 @@
-"""Per-user data isolation, against a real MongoDB.
+"""Per-user data isolation, against a real PostgreSQL.
 
 Skipped automatically when no database is reachable, so the default suite
 stays DB-free. Run with:
-    MONGODB_URI=mongodb://localhost:27020/movara pytest tests/test_user_isolation.py
+    DATABASE_URL=postgresql://postgres:postgres@localhost:55432/movara \
+        pytest tests/test_user_isolation.py
 """
 
 import pytest
 from fastapi.testclient import TestClient
-from pymongo.errors import PyMongoError
+from sqlalchemy import delete, select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app import db
 from app.main import app
@@ -20,10 +22,13 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def require_database():
     try:
-        db.database.client.admin.command('ping')
-    except PyMongoError:
-        pytest.skip('no MongoDB reachable')
-    db.workout_entries.delete_many({})
+        db.init()
+    except SQLAlchemyError:
+        pytest.skip('no PostgreSQL reachable')
+
+    with db.SessionLocal() as session:
+        session.execute(delete(db.WorkoutEntry))
+        session.commit()
 
 
 def headers_for(key, uid):
@@ -86,5 +91,6 @@ class TestIsolation:
 
     def test_new_entries_record_their_owner(self, local_signing_key):
         log_set(local_signing_key, 'alice')
-        doc = db.workout_entries.find_one({})
-        assert doc['userId'] == 'alice'
+        with db.SessionLocal() as session:
+            row = session.scalar(select(db.WorkoutEntry))
+        assert row.user_id == 'alice'

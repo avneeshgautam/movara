@@ -1,6 +1,6 @@
-import re
-
 from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from .. import db
 from ..auth import current_uid
@@ -9,24 +9,17 @@ from ..models import ExerciseResponse, NewExerciseRequest
 router = APIRouter()
 
 
-def _to_response(doc: dict) -> ExerciseResponse:
-    return ExerciseResponse(
-        id=str(doc["_id"]),
-        name=doc["name"],
-        category=doc.get("category"),
-    )
-
-
-def find_by_name_ignore_case(name: str) -> dict | None:
-    """Case-insensitive exact match, as Spring's findByNameIgnoreCase did."""
-    return db.exercises.find_one(
-        {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}
-    )
+def _to_response(row: db.Exercise) -> ExerciseResponse:
+    return ExerciseResponse(id=row.id, name=row.name, category=row.category)
 
 
 @router.get("/api/exercises", response_model=list[ExerciseResponse])
-def list_exercises(uid: str = Depends(current_uid)) -> list[ExerciseResponse]:
-    return [_to_response(d) for d in db.exercises.find()]
+def list_exercises(
+    uid: str = Depends(current_uid),
+    session: Session = Depends(db.get_session),
+) -> list[ExerciseResponse]:
+    rows = session.scalars(select(db.Exercise).order_by(db.Exercise.name)).all()
+    return [_to_response(r) for r in rows]
 
 
 @router.post(
@@ -37,13 +30,15 @@ def list_exercises(uid: str = Depends(current_uid)) -> list[ExerciseResponse]:
 def create_exercise(
     request: NewExerciseRequest,
     uid: str = Depends(current_uid),
+    session: Session = Depends(db.get_session),
 ) -> ExerciseResponse:
-    # Matches the Java behaviour: an existing name is returned rather than
-    # duplicated, and the status is still 201.
-    existing = find_by_name_ignore_case(request.name)
+    # An existing name is returned rather than duplicated, and the status is
+    # still 201 -- unchanged behaviour from the Mongo version.
+    existing = db.find_exercise_by_name(session, request.name)
     if existing:
         return _to_response(existing)
 
-    doc = {"name": request.name, "category": request.category}
-    result = db.exercises.insert_one(doc)
-    return _to_response({**doc, "_id": result.inserted_id})
+    row = db.Exercise(name=request.name, category=request.category)
+    session.add(row)
+    session.commit()
+    return _to_response(row)

@@ -1,30 +1,25 @@
 from datetime import date
 
-from bson import ObjectId
-from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from pymongo import DESCENDING
+from fastapi import APIRouter, Depends, Query, Response, status
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
 
 from .. import db
 from ..auth import current_uid
 from ..models import WorkoutEntryRequest, WorkoutEntryResponse
-from .exercises import find_by_name_ignore_case
 
 router = APIRouter()
 
-# Newest first: same ordering the Java repository used.
-_SORT = [("performedAt", DESCENDING), ("_id", DESCENDING)]
 
-
-def _to_response(doc: dict) -> WorkoutEntryResponse:
+def _to_response(row: db.WorkoutEntry) -> WorkoutEntryResponse:
     return WorkoutEntryResponse(
-        id=str(doc["_id"]),
-        exerciseName=doc["exerciseName"],
-        sets=doc["sets"],
-        reps=doc["reps"],
-        weightKg=doc.get("weightKg"),
-        performedAt=db.from_bson_date(doc["performedAt"]),
-        notes=doc.get("notes"),
+        id=row.id,
+        exerciseName=row.exercise_name,
+        sets=row.sets,
+        reps=row.reps,
+        weightKg=row.weight_kg,
+        performedAt=row.performed_at,
+        notes=row.notes,
     )
 
 
@@ -32,13 +27,17 @@ def _to_response(doc: dict) -> WorkoutEntryResponse:
 def list_entries(
     uid: str = Depends(current_uid),
     date_filter: date | None = Query(default=None, alias="date"),
+    session: Session = Depends(db.get_session),
 ) -> list[WorkoutEntryResponse]:
     """The caller's own entries, newest first. Optional ?date=2026-09-01."""
-    query: dict = {"userId": uid}
+    statement = select(db.WorkoutEntry).where(db.WorkoutEntry.user_id == uid)
     if date_filter is not None:
-        query["performedAt"] = db.to_bson_date(date_filter)
+        statement = statement.where(db.WorkoutEntry.performed_at == date_filter)
 
-    return [_to_response(d) for d in db.workout_entries.find(query).sort(_SORT)]
+    statement = statement.order_by(
+        db.WorkoutEntry.performed_at.desc(), db.WorkoutEntry.id.desc()
+    )
+    return [_to_response(r) for r in session.scalars(statement).all()]
 
 
 @router.post(
@@ -49,36 +48,44 @@ def list_entries(
 def create_entry(
     request: WorkoutEntryRequest,
     uid: str = Depends(current_uid),
+    session: Session = Depends(db.get_session),
 ) -> WorkoutEntryResponse:
-    # The exercises collection is a shared catalogue backing autocomplete; the
-    # entry itself is owned by the caller.
-    existing = find_by_name_ignore_case(request.exerciseName)
+    # Keep the shared catalogue populated for autocomplete, and store the
+    # canonical name on the entry.
+    existing = db.find_exercise_by_name(session, request.exerciseName)
     if existing:
-        exercise_name = existing["name"]
+        exercise_name = existing.name
     else:
         exercise_name = request.exerciseName
-        db.exercises.insert_one({"name": exercise_name, "category": None})
+        session.add(db.Exercise(name=exercise_name, category=None))
 
-    doc = {
-        "userId": uid,
-        "exerciseName": exercise_name,
-        "sets": request.sets,
-        "reps": request.reps,
-        "weightKg": request.weightKg,
-        "performedAt": db.to_bson_date(request.performedAt),
-        "notes": request.notes,
-    }
-    result = db.workout_entries.insert_one(doc)
-    return _to_response({**doc, "_id": result.inserted_id})
+    row = db.WorkoutEntry(
+        user_id=uid,
+        exercise_name=exercise_name,
+        sets=request.sets,
+        reps=request.reps,
+        weight_kg=request.weightKg,
+        performed_at=request.performedAt,
+        notes=request.notes,
+    )
+    session.add(row)
+    session.commit()
+    return _to_response(row)
 
 
 @router.delete("/api/workout-entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_entry(entry_id: str, uid: str = Depends(current_uid)) -> Response:
-    try:
-        object_id = ObjectId(entry_id)
-    except (InvalidId, TypeError):
-        raise HTTPException(status_code=404, detail="Not found") from None
-
-    # Scoped by userId so one account cannot delete another's entry.
-    db.workout_entries.delete_one({"_id": object_id, "userId": uid})
+def delete_entry(
+    entry_id: str,
+    uid: str = Depends(current_uid),
+    session: Session = Depends(db.get_session),
+) -> Response:
+    # Scoped by user_id so one account cannot delete another's entry.
+    # Deleting a missing id stays a silent no-op, as before.
+    session.execute(
+        delete(db.WorkoutEntry).where(
+            db.WorkoutEntry.id == entry_id,
+            db.WorkoutEntry.user_id == uid,
+        )
+    )
+    session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

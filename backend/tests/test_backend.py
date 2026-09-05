@@ -4,8 +4,6 @@ Request validation fails before any handler runs, so these exercise the real
 app without a live MongoDB. Full CRUD is verified against a real mongod.
 """
 
-from datetime import date, datetime
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -58,54 +56,23 @@ class TestValidation:
         assert detail and all({"loc", "msg", "type"} <= set(e) for e in detail)
 
 
-class TestDateStorage:
-    """Dates must round-trip as BSON dates, matching Spring's LocalDate mapping."""
+class TestDatabaseUrl:
+    """Supabase hands out postgresql:// URIs; SQLAlchemy must route them to
+    psycopg 3 rather than the (uninstalled) psycopg2."""
 
-    def test_written_as_midnight_datetime(self):
-        assert db.to_bson_date(date(2026, 9, 2)) == datetime(2026, 9, 2, 0, 0)
+    def test_rewrites_supabase_style_url(self):
+        assert db._normalised_url(
+            "postgresql://u:p@db.abc.supabase.co:5432/postgres"
+        ).startswith("postgresql+psycopg://")
 
-    def test_reads_datetime_date_and_string(self):
-        assert db.from_bson_date(datetime(2026, 9, 2, 13, 45)) == date(2026, 9, 2)
-        assert db.from_bson_date(date(2026, 9, 2)) == date(2026, 9, 2)
-        assert db.from_bson_date("2026-09-02") == date(2026, 9, 2)
+    def test_rewrites_legacy_postgres_scheme(self):
+        assert db._normalised_url("postgres://u:p@host/db").startswith(
+            "postgresql+psycopg://"
+        )
 
-    def test_rejects_nonsense(self):
-        with pytest.raises(ValueError):
-            db.from_bson_date(12345)
-
-
-class TestIndexSetup:
-    """Index creation must never take the service down.
-
-    Regression: the Java backend left a unique index named "name" on Atlas.
-    PyMongo defaults to "name_1", so Mongo raised IndexOptionsConflict and the
-    app crash-looped on startup.
-    """
-
-    def test_uses_the_same_index_name_spring_used(self, monkeypatch):
-        captured: dict = {}
-
-        def fake_create_index(keys, **kwargs):
-            captured.update(kwargs)
-            return "name"
-
-        monkeypatch.setattr(db.exercises, "create_index", fake_create_index)
-        db._ensure_name_index()
-
-        assert captured["name"] == "name"
-        assert captured["unique"] is True
-
-    def test_conflicting_index_is_survivable(self, monkeypatch):
-        from pymongo.errors import OperationFailure
-
-        def conflict(*args, **kwargs):
-            raise OperationFailure(
-                "Index already exists with a different name: name_1", 85
-            )
-
-        monkeypatch.setattr(db.exercises, "create_index", conflict)
-        # Must not raise — including from the logging call itself.
-        db._ensure_name_index()
+    def test_leaves_an_explicit_driver_alone(self):
+        url = "postgresql+psycopg://u:p@host/db"
+        assert db._normalised_url(url) == url
 
 
 class TestCorsSettings:

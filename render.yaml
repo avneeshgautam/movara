@@ -7,7 +7,7 @@
 # The service is a FastAPI (Python) app built via Docker
 # (backend/Dockerfile), which pins the Python version explicitly.
 #
-# Data lives in MongoDB Atlas (see MONGODB_URI below), so it now PERSISTS
+# Data lives in Supabase PostgreSQL (see DATABASE_URL below), so it PERSISTS
 # across the free plan's sleeps and redeploys. The plan still sleeps after
 # ~15 min idle, which only means a slow first request, not data loss.
 services:
@@ -20,10 +20,10 @@ services:
     dockerContext: .
     healthCheckPath: /health
     envVars:
-      # Your MongoDB Atlas connection string, INCLUDING the /movara database
-      # name and password. sync:false keeps it out of git -- set the real
+      # Supabase PostgreSQL connection string (Project Settings -> Database).
+      # Holds a password, so sync:false keeps it out of git -- set the real
       # value in the Render dashboard (Environment tab), never here.
-      - key: MONGODB_URI
+      - key: DATABASE_URL
         sync: false
       # Set this to your deployed frontend origin, e.g.
       # https://movara-9ol.pages.dev  (no trailing slash)
