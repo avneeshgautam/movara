@@ -10,6 +10,7 @@ import '../widgets/movara_header.dart';
 import 'account_tab.dart';
 import 'home_tab.dart';
 import 'reminders_tab.dart';
+import 'running_tab.dart';
 import 'workout_tab.dart';
 
 /// App shell: sticky header, tab content, and the bottom tab bar from the
@@ -99,11 +100,7 @@ class _HomeShellState extends State<HomeShell> {
                   entriesFuture: _entriesFuture,
                   onReload: _reload,
                 ),
-                const _ComingSoon(
-                  emoji: '🏃',
-                  title: 'Running',
-                  message: 'Route tracking and pace history will live here.',
-                ),
+                const RunningTab(),
                 RemindersTab(scheduler: _reminders),
                 AccountTab(
                   entriesFuture: _entriesFuture,
@@ -200,46 +197,6 @@ class _TabBar extends StatelessWidget {
               ),
             );
           }),
-        ),
-      ),
-    );
-  }
-}
-
-class _ComingSoon extends StatelessWidget {
-  const _ComingSoon({
-    required this.emoji,
-    required this.title,
-    required this.message,
-  });
-
-  final String emoji;
-  final String title;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.movara;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 44)),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: AppTheme.display(color: c.textPrimary, fontSize: 20),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: c.textSecondary, fontSize: 13),
-            ),
-          ],
         ),
       ),
     );

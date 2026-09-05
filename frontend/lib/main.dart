@@ -33,8 +33,9 @@ class MovaraApp extends StatefulWidget {
 }
 
 class _MovaraAppState extends State<MovaraApp> {
-  // The design ships dark-first; the header toggle flips this.
-  bool _isDark = true;
+  /// Follow the device's light/dark setting until the user picks one, after
+  /// which their choice sticks for the session.
+  ThemeMode _mode = ThemeMode.system;
 
   @override
   Widget build(BuildContext context) {
@@ -43,14 +44,29 @@ class _MovaraAppState extends State<MovaraApp> {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
-      home: widget.firebaseReady
-          ? AuthGate(
-              auth: AuthService(),
-              isDark: _isDark,
-              onToggleTheme: () => setState(() => _isDark = !_isDark),
-            )
-          : const _FirebaseNotConfigured(),
+      themeMode: _mode,
+      // Builder so MediaQuery is in scope: with ThemeMode.system the app has
+      // to read the platform brightness to know which way the toggle points.
+      home: Builder(
+        builder: (context) {
+          if (!widget.firebaseReady) return const _FirebaseNotConfigured();
+
+          final isDark = switch (_mode) {
+            ThemeMode.system =>
+              MediaQuery.platformBrightnessOf(context) == Brightness.dark,
+            ThemeMode.dark => true,
+            ThemeMode.light => false,
+          };
+
+          return AuthGate(
+            auth: AuthService(),
+            isDark: isDark,
+            onToggleTheme: () => setState(
+              () => _mode = isDark ? ThemeMode.light : ThemeMode.dark,
+            ),
+          );
+        },
+      ),
     );
   }
 }
