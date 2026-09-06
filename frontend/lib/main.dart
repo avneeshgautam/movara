@@ -13,7 +13,7 @@ Future<void> main() async {
   var firebaseReady = false;
   if (FirebaseConfig.isConfigured) {
     try {
-      await Firebase.initializeApp(options: FirebaseConfig.options);
+      await Firebase.initializeApp(options: FirebaseConfig.platformOptions);
       firebaseReady = true;
     } catch (_) {
       // Fall through to the setup screen rather than a blank page.

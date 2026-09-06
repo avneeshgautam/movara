@@ -4,6 +4,7 @@ import '../models/workout_entry.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/reminder_scheduler.dart';
+import '../services/run_store.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 import '../widgets/movara_header.dart';
@@ -35,6 +36,7 @@ class _HomeShellState extends State<HomeShell> {
   late final ApiService _api =
       ApiService(tokenProvider: widget.auth.idToken);
   final _reminders = ReminderScheduler();
+  final _runs = RunStore();
   int _index = 0;
 
   // Entry list lives here, shared by Home (stats) and Workout (log), so a
@@ -46,11 +48,13 @@ class _HomeShellState extends State<HomeShell> {
     super.initState();
     _entriesFuture = _api.fetchWorkoutEntries();
     _reminders.load();
+    _runs.load();
   }
 
   @override
   void dispose() {
     _reminders.dispose();
+    _runs.dispose();
     _api.dispose();
     super.dispose();
   }
@@ -100,7 +104,7 @@ class _HomeShellState extends State<HomeShell> {
                   entriesFuture: _entriesFuture,
                   onReload: _reload,
                 ),
-                const RunningTab(),
+                RunningTab(store: _runs),
                 RemindersTab(scheduler: _reminders),
                 AccountTab(
                   entriesFuture: _entriesFuture,

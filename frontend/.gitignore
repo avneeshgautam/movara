@@ -20,3 +20,7 @@ movara-web.zip
 
 # Firebase client config — kept out of git so secret scanners stay quiet.
 firebase.env
+
+# Firebase iOS config. Not secret (it ships inside the app), but kept out of
+# git so GitHub's secret scanner stays quiet, like firebase.env.
+ios/Runner/GoogleService-Info.plist

@@ -18,6 +18,11 @@ dependencies:
   shared_preferences: ^2.3.0
   # Browser Notification API access for water reminders.
   web: ^1.1.0
+  # Route map tiles from OpenStreetMap — no API key, no billing account.
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  # Device GPS for live run tracking (browser Geolocation API on web).
+  geolocator: ^13.0.2
   # Google sign-in via Firebase Authentication.
   firebase_core: ^3.6.0
   firebase_auth: ^5.3.1

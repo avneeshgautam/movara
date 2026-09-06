@@ -1,14 +1,19 @@
 {
-    "name": "movara_app",
-    "short_name": "movara_app",
+    "name": "Movara",
+    "short_name": "Movara",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F5F5F0",
+    "theme_color": "#F5F5F0",
+    "description": "Track workouts and runs, and share your route.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
+        {
+            "src": "icons/apple-touch-icon-180.png",
+            "sizes": "180x180",
+            "type": "image/png"
+        },
         {
             "src": "icons/Icon-192.png",
             "sizes": "192x192",
