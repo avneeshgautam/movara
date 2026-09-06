@@ -15,6 +15,10 @@ import 'test_setup.dart';
 void main() {
   setUpAll(disableGoogleFontsNetwork);
 
+  // Dated to earlier today so "this week" holds whenever the suite runs. A
+  // fixed calendar date silently falls out of the current week once the week
+  // rolls over, which used to break the weekly-count test every Monday.
+  final today = DateTime.now();
   final sampleEntries = [
     WorkoutEntry(
       id: 'e1',
@@ -22,7 +26,7 @@ void main() {
       sets: 4,
       reps: 12,
       weightKg: 60,
-      performedAt: DateTime(2026, 8, 31),
+      performedAt: DateTime(today.year, today.month, today.day),
     ),
   ];
 

@@ -37,6 +37,12 @@ class _MovaraAppState extends State<MovaraApp> {
   /// which their choice sticks for the session.
   ThemeMode _mode = ThemeMode.system;
 
+  /// Built once, not per build. A fresh AuthService on every rebuild (e.g. a
+  /// theme toggle) hands AuthGate a new auth stream, which drops its
+  /// StreamBuilder back to the loading state and rebuilds the whole shell --
+  /// losing the current tab.
+  final AuthService _auth = AuthService();
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -59,7 +65,7 @@ class _MovaraAppState extends State<MovaraApp> {
           };
 
           return AuthGate(
-            auth: AuthService(),
+            auth: _auth,
             isDark: isDark,
             onToggleTheme: () => setState(
               () => _mode = isDark ? ThemeMode.light : ThemeMode.dark,
