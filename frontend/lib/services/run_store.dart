@@ -71,14 +71,21 @@ class RunStore extends ChangeNotifier {
   double totalKmThisWeek({DateTime? now}) =>
       kmByWeekday(now: now).fold(0, (a, b) => a + b);
 
-  int runsThisWeek({DateTime? now}) {
+  Iterable<RunRecord> _thisWeek({DateTime? now}) {
     final today = _startOfDay(now ?? DateTime.now());
     final monday = today.subtract(Duration(days: today.weekday - 1));
     return _runs.where((r) {
       final offset = _startOfDay(r.startedAt).difference(monday).inDays;
       return offset >= 0 && offset < 7;
-    }).length;
+    });
   }
+
+  int runsThisWeek({DateTime? now}) => _thisWeek(now: now).length;
+
+  /// Minutes spent running so far this week.
+  int activeMinutesThisWeek({DateTime? now}) => _thisWeek(now: now)
+      .fold<int>(0, (a, r) => a + r.elapsedSeconds) ~/
+      60;
 
   /// Furthest single run.
   RunRecord? get longestRun {

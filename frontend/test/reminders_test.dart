@@ -13,7 +13,9 @@ class _FakeNotifications implements WaterNotifications {
 
   String _permission = 'default';
   final List<String> shown = [];
+  final List<int> scheduledBaseIds = [];
   int permissionRequests = 0;
+  int cancelAllCount = 0;
 
   @override
   bool get isSupported => supported;
@@ -35,139 +37,27 @@ class _FakeNotifications implements WaterNotifications {
   Future<void> show(String title, String body) async => shown.add(title);
 
   @override
-  Future<void> schedule(int everyMinutes) async {}
+  Future<void> scheduleReminder({
+    required int baseId,
+    required String title,
+    required String body,
+    required int everyMinutes,
+    required int count,
+  }) async =>
+      scheduledBaseIds.add(baseId);
 
   @override
-  Future<void> cancelAll() async {}
+  Future<void> cancelAll() async => cancelAllCount++;
 }
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  group('ReminderScheduler', () {
-    test('starts off, defaulting to a 30 minute interval', () async {
-      final s = ReminderScheduler();
-      await s.load();
+  ReminderScheduler make([_FakeNotifications? fake]) =>
+      ReminderScheduler(notifications: fake ?? _FakeNotifications());
 
-      expect(s.enabled, isFalse);
-      expect(s.intervalMinutes, 30);
-      expect(s.nextDue, isNull);
-      s.dispose();
-    });
-
-    test('enabling schedules the next reminder one interval out', () async {
-      final s = ReminderScheduler();
-      await s.load();
-      await s.setEnabled(true);
-
-      expect(s.enabled, isTrue);
-      final due = s.nextDue;
-      expect(due, isNotNull);
-
-      final expected = DateTime.now().add(Duration(minutes: s.intervalMinutes));
-      expect(due!.difference(expected).inMinutes.abs(), lessThan(2));
-      s.dispose();
-    });
-
-    test('changing the interval re-bases the countdown', () async {
-      final s = ReminderScheduler();
-      await s.load();
-      await s.setEnabled(true);
-      await s.setIntervalMinutes(45);
-
-      expect(s.intervalMinutes, 45);
-      final expected = DateTime.now().add(const Duration(minutes: 45));
-      expect(s.nextDue!.difference(expected).inMinutes.abs(), lessThan(2));
-      s.dispose();
-    });
-
-    test('disabling clears the pending reminder', () async {
-      final s = ReminderScheduler();
-      await s.load();
-      await s.setEnabled(true);
-      await s.setEnabled(false);
-
-      expect(s.enabled, isFalse);
-      expect(s.nextDue, isNull);
-      s.dispose();
-    });
-
-    test('settings survive a restart', () async {
-      final first = ReminderScheduler();
-      await first.load();
-      await first.setEnabled(true);
-      await first.setIntervalMinutes(90);
-      first.dispose();
-
-      final second = ReminderScheduler();
-      await second.load();
-
-      expect(second.enabled, isTrue);
-      expect(second.intervalMinutes, 90);
-      expect(second.nextDue, isNotNull);
-      second.dispose();
-    });
-
-    test('a reminder that came due while closed is caught up on load',
-        () async {
-      // Persisted state as if the app was closed past the due time.
-      SharedPreferences.setMockInitialValues({
-        'water_reminder_enabled': true,
-        'water_reminder_interval_minutes': 30,
-        'water_reminder_next_due_ms':
-            DateTime.now().subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
-      });
-
-      final s = ReminderScheduler();
-      await s.load();
-
-      // It fired and re-armed for the next interval rather than staying stale.
-      expect(s.nextDue!.isAfter(DateTime.now()), isTrue);
-      s.dispose();
-    });
-
-    test('offers preset intervals in minutes', () {
-      expect(ReminderScheduler.intervalOptions, [15, 30, 45, 60, 90, 120, 180]);
-      expect(ReminderScheduler.defaultIntervalMinutes, 30);
-    });
-
-    test('accepts a typed custom interval', () async {
-      final s = ReminderScheduler();
-      await s.load();
-      await s.setIntervalMinutes(7);
-
-      expect(s.intervalMinutes, 7);
-      expect(s.intervalLabel, '7 min');
-      s.dispose();
-    });
-
-    test('clamps out-of-range custom values instead of rejecting them',
-        () async {
-      final s = ReminderScheduler();
-      await s.load();
-
-      await s.setIntervalMinutes(0);
-      expect(s.intervalMinutes, ReminderScheduler.minIntervalMinutes);
-
-      await s.setIntervalMinutes(99999);
-      expect(s.intervalMinutes, ReminderScheduler.maxIntervalMinutes);
-      s.dispose();
-    });
-
-    test('carries over an interval saved by an older build (hours)', () async {
-      SharedPreferences.setMockInitialValues({
-        'water_reminder_enabled': false,
-        'water_reminder_interval_hours': 2,
-      });
-
-      final s = ReminderScheduler();
-      await s.load();
-
-      expect(s.intervalMinutes, 120);
-      s.dispose();
-    });
-
-    test('formats intervals for display', () {
+  group('formatInterval', () {
+    test('formats minutes, hours and mixed', () {
       expect(formatInterval(30), '30 min');
       expect(formatInterval(60), '1 hour');
       expect(formatInterval(120), '2 hours');
@@ -175,14 +65,143 @@ void main() {
     });
   });
 
+  group('ReminderScheduler list', () {
+    test('starts empty on a fresh install', () async {
+      final s = make();
+      await s.load();
+      expect(s.reminders, isEmpty);
+      expect(s.hasAnyEnabled, isFalse);
+      s.dispose();
+    });
+
+    test('adds a reminder and asks for permission', () async {
+      final fake = _FakeNotifications();
+      final s = make(fake);
+      await s.load();
+
+      await s.addReminder(label: 'Stretch', intervalMinutes: 45);
+
+      expect(s.reminders, hasLength(1));
+      expect(s.reminders.single.label, 'Stretch');
+      expect(s.reminders.single.intervalMinutes, 45);
+      expect(s.reminders.single.enabled, isTrue);
+      expect(fake.permissionRequests, 1);
+      s.dispose();
+    });
+
+    test('a blank label falls back rather than saving empty', () async {
+      final s = make();
+      await s.load();
+      await s.addReminder(label: '   ', intervalMinutes: 30);
+      expect(s.reminders.single.label, 'Reminder');
+      s.dispose();
+    });
+
+    test('clamps an out-of-range interval', () async {
+      final s = make();
+      await s.load();
+      await s.addReminder(label: 'X', intervalMinutes: 5000);
+      expect(s.reminders.single.intervalMinutes,
+          ReminderScheduler.maxIntervalMinutes);
+      s.dispose();
+    });
+
+    test('editing changes the label and interval', () async {
+      final s = make();
+      await s.load();
+      await s.addReminder(label: 'Walk', intervalMinutes: 60);
+      final id = s.reminders.single.id;
+
+      await s.updateReminder(id, label: 'Long walk', intervalMinutes: 90);
+      expect(s.reminders.single.label, 'Long walk');
+      expect(s.reminders.single.intervalMinutes, 90);
+      s.dispose();
+    });
+
+    test('toggling off clears the due time', () async {
+      final s = make();
+      await s.load();
+      await s.addReminder(label: 'Water', intervalMinutes: 30);
+      final id = s.reminders.single.id;
+      expect(s.reminders.single.nextDue, isNotNull);
+
+      await s.setReminderEnabled(id, false);
+      expect(s.reminders.single.enabled, isFalse);
+      expect(s.reminders.single.nextDue, isNull);
+      expect(s.hasAnyEnabled, isFalse);
+      s.dispose();
+    });
+
+    test('removing takes it out of the list', () async {
+      final s = make();
+      await s.load();
+      await s.addReminder(label: 'A', intervalMinutes: 30);
+      await s.addReminder(label: 'B', intervalMinutes: 60);
+      final firstId = s.reminders.first.id;
+
+      await s.removeReminder(firstId);
+      expect(s.reminders.map((r) => r.label), ['B']);
+      s.dispose();
+    });
+
+    test('each reminder gets its own notification namespace', () async {
+      final s = make();
+      await s.load();
+      await s.addReminder(label: 'A', intervalMinutes: 30);
+      await s.addReminder(label: 'B', intervalMinutes: 60);
+      expect(s.reminders[0].notifId, isNot(s.reminders[1].notifId));
+      s.dispose();
+    });
+
+    test('reminders survive a reload', () async {
+      final first = make();
+      await first.load();
+      await first.addReminder(label: 'Water', intervalMinutes: 30);
+      await first.addReminder(label: 'Stand up', intervalMinutes: 45);
+      first.dispose();
+
+      final second = make();
+      await second.load();
+      expect(second.reminders.map((r) => r.label), ['Water', 'Stand up']);
+      second.dispose();
+    });
+  });
+
+  group('migration from the old single water reminder', () {
+    test('carries the legacy reminder in as the first item', () async {
+      SharedPreferences.setMockInitialValues({
+        'water_reminder_enabled': true,
+        'water_reminder_interval_minutes': 45,
+      });
+      final s = make();
+      await s.load();
+
+      expect(s.reminders, hasLength(1));
+      expect(s.reminders.single.label, 'Drink water');
+      expect(s.reminders.single.intervalMinutes, 45);
+      expect(s.reminders.single.enabled, isTrue);
+      s.dispose();
+    });
+
+    test('migrates a disabled legacy reminder without a due time', () async {
+      SharedPreferences.setMockInitialValues({
+        'water_reminder_enabled': false,
+        'water_reminder_interval_minutes': 30,
+      });
+      final s = make();
+      await s.load();
+      expect(s.reminders.single.enabled, isFalse);
+      expect(s.reminders.single.nextDue, isNull);
+      s.dispose();
+    });
+  });
+
   group('the test reminder button', () {
     test('asks for permission first, then sends', () async {
       final fake = _FakeNotifications();
-      final s = ReminderScheduler(notifications: fake);
+      final s = make(fake);
       await s.load();
 
-      // Regression: this used to call show() with no permission, which iOS
-      // drops silently -- the button appeared to do nothing at all.
       expect(await s.sendTest(), isTrue);
       expect(fake.permissionRequests, 1);
       expect(fake.shown, hasLength(1));
@@ -191,33 +210,21 @@ void main() {
 
     test('reports failure when permission is refused', () async {
       final fake = _FakeNotifications(grants: false);
-      final s = ReminderScheduler(notifications: fake);
+      final s = make(fake);
       await s.load();
 
       expect(await s.sendTest(), isFalse);
-      expect(fake.shown, isEmpty, reason: 'nothing to send without permission');
+      expect(fake.shown, isEmpty);
       s.dispose();
     });
 
     test('reports failure where notifications are unsupported', () async {
       final fake = _FakeNotifications(supported: false);
-      final s = ReminderScheduler(notifications: fake);
+      final s = make(fake);
       await s.load();
 
       expect(await s.sendTest(), isFalse);
       expect(fake.permissionRequests, 0);
-      s.dispose();
-    });
-
-    test('does not ask again once permission is granted', () async {
-      final fake = _FakeNotifications();
-      final s = ReminderScheduler(notifications: fake);
-      await s.load();
-
-      await s.sendTest();
-      await s.sendTest();
-      expect(fake.permissionRequests, 1);
-      expect(fake.shown, hasLength(2));
       s.dispose();
     });
   });

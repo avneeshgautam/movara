@@ -42,7 +42,15 @@ class WaterNotifications {
   /// own timer and only catch up when it is reopened.
   bool get schedulesInBackground => false;
 
-  Future<void> schedule(int everyMinutes) async {}
+  static const maxSeries = 0;
+
+  Future<void> scheduleReminder({
+    required int baseId,
+    required String title,
+    required String body,
+    required int everyMinutes,
+    required int count,
+  }) async {}
 
   Future<void> cancelAll() async {}
 }

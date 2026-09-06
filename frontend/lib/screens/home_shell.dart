@@ -98,7 +98,11 @@ class _HomeShellState extends State<HomeShell> {
             child: IndexedStack(
               index: _index,
               children: [
-                HomeTab(entriesFuture: _entriesFuture, onReload: _reload),
+                HomeTab(
+                  entriesFuture: _entriesFuture,
+                  runStore: _runs,
+                  onReload: _reload,
+                ),
                 WorkoutTab(
                   api: _api,
                   entriesFuture: _entriesFuture,

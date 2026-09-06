@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/reminder.dart';
 import 'water_notifications.dart';
 
 /// Human label for an interval in minutes: "30 min", "1 hour", "1h 30m".
@@ -14,153 +15,230 @@ String formatInterval(int minutes) {
   return '${hours}h ${rest}m';
 }
 
-/// Drives the water reminder: stores whether it is on, how often it repeats,
-/// and when it is next due, then fires a browser notification when that time
-/// passes.
+/// Manages a list of repeating reminders: create, edit, enable, delete, and
+/// fire them.
 ///
-/// The due time is persisted, so reopening the app after being away still
-/// surfaces a reminder that came due while it was closed. A browser cannot
-/// wake a closed tab on its own, so this is catch-up rather than true push.
+/// On iOS the OS holds the schedule, so reminders arrive with the app closed.
+/// On the web a timer fires due reminders and catches up on ones that came due
+/// while the tab was shut — a browser cannot wake a closed tab.
 class ReminderScheduler extends ChangeNotifier {
   ReminderScheduler({WaterNotifications notifications = const WaterNotifications()})
       : _notifications = notifications;
 
-  /// Presets offered in the dropdown, in minutes. Any other value can still be
-  /// set by typing a custom one.
+  /// Presets offered when picking an interval, in minutes. Any other value can
+  /// still be typed.
   static const intervalOptions = [15, 30, 45, 60, 90, 120, 180];
 
   static const defaultIntervalMinutes = 30;
   static const minIntervalMinutes = 1;
   static const maxIntervalMinutes = 24 * 60;
 
-  static const _kEnabled = 'water_reminder_enabled';
-  static const _kIntervalMinutes = 'water_reminder_interval_minutes';
+  static const _kReminders = 'reminders_v2';
+  // Legacy single-water-reminder keys, migrated once.
+  static const _kLegacyEnabled = 'water_reminder_enabled';
+  static const _kLegacyIntervalMinutes = 'water_reminder_interval_minutes';
   static const _kLegacyIntervalHours = 'water_reminder_interval_hours';
-  static const _kNextDue = 'water_reminder_next_due_ms';
 
   final WaterNotifications _notifications;
   Timer? _ticker;
 
-  bool _enabled = false;
-  int _intervalMinutes = defaultIntervalMinutes;
-  DateTime? _nextDue;
+  List<Reminder> _reminders = [];
+  int _nextNotifId = 1;
   bool _loaded = false;
 
-  bool get enabled => _enabled;
-  int get intervalMinutes => _intervalMinutes;
-  String get intervalLabel => formatInterval(_intervalMinutes);
-  DateTime? get nextDue => _nextDue;
+  List<Reminder> get reminders => List.unmodifiable(_reminders);
   bool get isLoaded => _loaded;
+  bool get hasAnyEnabled => _reminders.any((r) => r.enabled);
 
   bool get isSupported => _notifications.isSupported;
   String get permission => _notifications.permission;
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
-    _enabled = prefs.getBool(_kEnabled) ?? false;
 
-    // Older builds stored whole hours; carry that value over once.
-    final minutes = prefs.getInt(_kIntervalMinutes);
-    final legacyHours = prefs.getInt(_kLegacyIntervalHours);
-    _intervalMinutes = minutes ??
-        (legacyHours != null ? legacyHours * 60 : defaultIntervalMinutes);
-
-    final due = prefs.getInt(_kNextDue);
-    _nextDue = due == null ? null : DateTime.fromMillisecondsSinceEpoch(due);
+    final raw = prefs.getString(_kReminders);
+    if (raw != null) {
+      _reminders = Reminder.decode(raw);
+    } else {
+      _reminders = _migrateLegacy(prefs);
+      await _persist();
+    }
+    _nextNotifId = _reminders.fold<int>(0, (m, r) => r.notifId > m ? r.notifId : m) + 1;
     _loaded = true;
 
-    if (_enabled) {
-      _startTicker();
-      // Only a limited run of reminders can be queued with the OS at once,
-      // so top the queue up whenever the app is opened.
-      if (_notifications.schedulesInBackground) {
-        await _notifications.schedule(_intervalMinutes);
-      }
-    }
-    _fireIfDue();
+    if (hasAnyEnabled) _startTicker();
+    await _reschedule(requestPermission: false);
+    _fireDue();
     notifyListeners();
   }
 
-  Future<void> setEnabled(bool value) async {
-    _enabled = value;
-    if (value) {
-      if (_notifications.permission != 'granted') {
-        await _notifications.requestPermission();
-      }
-      _nextDue = DateTime.now().add(Duration(minutes: _intervalMinutes));
-      _startTicker();
-      if (_notifications.schedulesInBackground) {
-        await _notifications.schedule(_intervalMinutes);
-      }
-    } else {
-      _nextDue = null;
-      _stopTicker();
-      await _notifications.cancelAll();
-    }
-    await _persist();
-    notifyListeners();
+  /// Turns the old single water reminder into the first item in the list, so
+  /// nothing is lost across the upgrade. Returns an empty list on a genuinely
+  /// fresh install, where none of the legacy keys were ever written.
+  List<Reminder> _migrateLegacy(SharedPreferences prefs) {
+    final hasLegacy = prefs.containsKey(_kLegacyEnabled) ||
+        prefs.containsKey(_kLegacyIntervalMinutes) ||
+        prefs.containsKey(_kLegacyIntervalHours);
+    if (!hasLegacy) return [];
+
+    final enabled = prefs.getBool(_kLegacyEnabled) ?? false;
+    final minutes = prefs.getInt(_kLegacyIntervalMinutes) ??
+        ((prefs.getInt(_kLegacyIntervalHours) ?? 0) * 60);
+    return [
+      Reminder(
+        id: _newId(),
+        notifId: 1,
+        label: 'Drink water',
+        intervalMinutes: minutes > 0 ? minutes : defaultIntervalMinutes,
+        enabled: enabled,
+        nextDue: enabled
+            ? DateTime.now().add(Duration(
+                minutes: minutes > 0 ? minutes : defaultIntervalMinutes))
+            : null,
+      ),
+    ];
   }
 
-  /// Sets a new interval in minutes; values outside the supported range are
-  /// clamped rather than rejected.
-  Future<void> setIntervalMinutes(int minutes) async {
-    _intervalMinutes =
-        minutes.clamp(minIntervalMinutes, maxIntervalMinutes).toInt();
-    // Re-base the countdown so a change takes effect immediately.
-    if (_enabled) {
-      _nextDue = DateTime.now().add(Duration(minutes: _intervalMinutes));
-      if (_notifications.schedulesInBackground) {
-        await _notifications.schedule(_intervalMinutes);
-      }
-    }
-    await _persist();
-    notifyListeners();
+  Future<void> addReminder({
+    required String label,
+    required int intervalMinutes,
+  }) async {
+    final trimmed = label.trim();
+    final reminder = Reminder(
+      id: _newId(),
+      notifId: _nextNotifId++,
+      label: trimmed.isEmpty ? 'Reminder' : trimmed,
+      intervalMinutes: _clampInterval(intervalMinutes),
+      enabled: true,
+      nextDue: DateTime.now().add(Duration(minutes: _clampInterval(intervalMinutes))),
+    );
+    _reminders = [..._reminders, reminder];
+    await _afterChange(requestPermission: true);
+  }
+
+  Future<void> updateReminder(
+    String id, {
+    String? label,
+    int? intervalMinutes,
+  }) async {
+    _reminders = _reminders.map((r) {
+      if (r.id != id) return r;
+      final minutes =
+          intervalMinutes == null ? r.intervalMinutes : _clampInterval(intervalMinutes);
+      return r.copyWith(
+        label: label?.trim().isEmpty ?? true ? r.label : label!.trim(),
+        intervalMinutes: minutes,
+        // Re-base so an interval change takes effect immediately.
+        nextDue: r.enabled ? DateTime.now().add(Duration(minutes: minutes)) : null,
+      );
+    }).toList();
+    await _afterChange(requestPermission: false);
+  }
+
+  Future<void> setReminderEnabled(String id, bool enabled) async {
+    _reminders = _reminders.map((r) {
+      if (r.id != id) return r;
+      return r.copyWith(
+        enabled: enabled,
+        nextDue:
+            enabled ? DateTime.now().add(Duration(minutes: r.intervalMinutes)) : null,
+        clearNextDue: !enabled,
+      );
+    }).toList();
+    await _afterChange(requestPermission: enabled);
+  }
+
+  Future<void> removeReminder(String id) async {
+    _reminders = _reminders.where((r) => r.id != id).toList();
+    await _afterChange(requestPermission: false);
   }
 
   /// Sends a one-off reminder now. Returns false when the platform will not
   /// deliver it, so the UI can say why instead of appearing to do nothing.
   Future<bool> sendTest() async {
     if (!_notifications.isSupported) return false;
-
-    // iOS drops notifications silently when permission was never granted,
-    // and the toggle is what normally asks for it -- so ask here too.
     if (_notifications.permission != 'granted') {
       final result = await _notifications.requestPermission();
       notifyListeners();
       if (result != 'granted') return false;
     }
-
     await _notifications.show(
-      'Time to drink water 💧',
+      'Test reminder 💧',
       'This is a test reminder from Movara.',
     );
     return true;
   }
 
-  /// Fires and re-schedules if the due time has passed.
-  void _fireIfDue() {
-    if (!_enabled) return;
-    final due = _nextDue;
-    if (due == null || DateTime.now().isBefore(due)) return;
+  Future<void> _afterChange({required bool requestPermission}) async {
+    if (hasAnyEnabled) {
+      _startTicker();
+    } else {
+      _stopTicker();
+    }
+    await _persist();
+    await _reschedule(requestPermission: requestPermission);
+    notifyListeners();
+  }
 
-    // When the OS holds the schedule it has already delivered this one;
-    // firing again here would double up.
-    if (!_notifications.schedulesInBackground) {
-      _notifications.show(
-        'Time to drink water 💧',
-        'Stay hydrated — next reminder in $intervalLabel.',
+  /// Re-lays the OS notification schedule to match the current list. Called on
+  /// every change; on the web this is a no-op beyond permission.
+  Future<void> _reschedule({required bool requestPermission}) async {
+    if (!_notifications.isSupported) return;
+
+    final enabled = _reminders.where((r) => r.enabled).toList();
+    if (requestPermission &&
+        enabled.isNotEmpty &&
+        _notifications.permission != 'granted') {
+      await _notifications.requestPermission();
+    }
+
+    if (!_notifications.schedulesInBackground) return;
+
+    await _notifications.cancelAll();
+    if (enabled.isEmpty) return;
+
+    // iOS caps pending notifications, so share the budget across reminders.
+    const budget = WaterNotifications.maxSeries;
+    final per = (budget ~/ enabled.length).clamp(1, budget);
+    for (final r in enabled) {
+      await _notifications.scheduleReminder(
+        baseId: r.notifId,
+        title: r.label,
+        body: 'Reminder from Movara — ${r.label}.',
+        everyMinutes: r.intervalMinutes,
+        count: per,
       );
     }
-    _nextDue = DateTime.now().add(Duration(minutes: _intervalMinutes));
-    _persist();
-    notifyListeners();
+  }
+
+  /// Fires any web reminders whose time has passed and re-bases them. On iOS
+  /// the OS has already delivered them, so this only advances the countdown.
+  void _fireDue() {
+    var changed = false;
+    _reminders = _reminders.map((r) {
+      if (!r.enabled || r.nextDue == null) return r;
+      if (DateTime.now().isBefore(r.nextDue!)) return r;
+
+      if (!_notifications.schedulesInBackground) {
+        _notifications.show(r.label, 'Reminder from Movara — ${r.label}.');
+      }
+      changed = true;
+      return r.copyWith(
+        nextDue: DateTime.now().add(Duration(minutes: r.intervalMinutes)),
+      );
+    }).toList();
+
+    if (changed) {
+      _persist();
+      notifyListeners();
+    }
   }
 
   void _startTicker() {
     _ticker?.cancel();
-    // Short poll rather than one long timer: browsers throttle long timers in
-    // background tabs, and this also refreshes the countdown in the UI.
-    _ticker = Timer.periodic(const Duration(seconds: 20), (_) => _fireIfDue());
+    // Short poll, so a throttled background tab still catches up and the UI
+    // countdown stays fresh.
+    _ticker = Timer.periodic(const Duration(seconds: 20), (_) => _fireDue());
   }
 
   void _stopTicker() {
@@ -170,15 +248,14 @@ class ReminderScheduler extends ChangeNotifier {
 
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kEnabled, _enabled);
-    await prefs.setInt(_kIntervalMinutes, _intervalMinutes);
-    final due = _nextDue;
-    if (due == null) {
-      await prefs.remove(_kNextDue);
-    } else {
-      await prefs.setInt(_kNextDue, due.millisecondsSinceEpoch);
-    }
+    await prefs.setString(_kReminders, Reminder.encode(_reminders));
   }
+
+  int _clampInterval(int minutes) =>
+      minutes.clamp(minIntervalMinutes, maxIntervalMinutes).toInt();
+
+  String _newId() =>
+      '${DateTime.now().microsecondsSinceEpoch}_${_reminders.length}';
 
   @override
   void dispose() {

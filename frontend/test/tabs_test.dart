@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:movara_app/models/workout_entry.dart';
+import 'package:movara_app/services/run_store.dart';
 import 'package:movara_app/services/api_service.dart';
 import 'package:movara_app/screens/account_tab.dart';
 import 'package:movara_app/screens/home_tab.dart';
@@ -39,6 +40,7 @@ void main() {
     testWidgets('shows the dashboard, not the log actions', (tester) async {
       await tester.pumpWidget(wrap(HomeTab(
         entriesFuture: Future.value(sampleEntries),
+        runStore: RunStore(),
         onReload: () async {},
       )));
       await tester.pumpAndSettle();
@@ -62,6 +64,7 @@ void main() {
     testWidgets('derives the weekly set count from real entries', (tester) async {
       await tester.pumpWidget(wrap(HomeTab(
         entriesFuture: Future.value(sampleEntries),
+        runStore: RunStore(),
         onReload: () async {},
       )));
       await tester.pumpAndSettle();

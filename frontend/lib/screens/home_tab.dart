@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../models/run_record.dart';
 import '../models/workout_entry.dart';
+import '../services/run_store.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 import '../widgets/dashboard_widgets.dart';
@@ -15,10 +17,12 @@ class HomeTab extends StatelessWidget {
   const HomeTab({
     super.key,
     required this.entriesFuture,
+    required this.runStore,
     required this.onReload,
   });
 
   final Future<List<WorkoutEntry>> entriesFuture;
+  final RunStore runStore;
   final Future<void> Function() onReload;
 
   @override
@@ -29,7 +33,9 @@ class HomeTab extends StatelessWidget {
       onRefresh: onReload,
       color: c.accent,
       backgroundColor: c.surface,
-      child: FutureBuilder<List<WorkoutEntry>>(
+      child: AnimatedBuilder(
+        animation: runStore,
+        builder: (context, _) => FutureBuilder<List<WorkoutEntry>>(
         future: entriesFuture,
         builder: (context, snapshot) {
           final entries = snapshot.data ?? const <WorkoutEntry>[];
@@ -88,11 +94,23 @@ class HomeTab extends StatelessWidget {
                       unit: 'wk',
                     ),
                   ),
-                  // TODO: placeholders -- no distance/active-minutes source yet.
+                  // Real: distance run and minutes active this week.
                   const SizedBox(width: 10),
-                  const Expanded(child: MiniStat(label: 'Distance', value: '4.2', unit: 'km')),
+                  Expanded(
+                    child: MiniStat(
+                      label: 'Distance',
+                      value: runStore.totalKmThisWeek().toStringAsFixed(1),
+                      unit: 'km',
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  const Expanded(child: MiniStat(label: 'Active', value: '38', unit: 'min')),
+                  Expanded(
+                    child: MiniStat(
+                      label: 'Active',
+                      value: '${runStore.activeMinutesThisWeek()}',
+                      unit: 'min',
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 24),
@@ -118,14 +136,10 @@ class HomeTab extends StatelessWidget {
                 date: 'Today',
                 tint: c.accentSoft,
               ),
-              const SizedBox(height: 10),
-              AchievementCard(
-                emoji: '⚡',
-                title: 'Personal Best',
-                description: '5K run in 24 min',
-                date: 'Yesterday',
-                tint: c.blueSoft,
-              ),
+              if (_runAchievement(context) case final card?) ...[
+                const SizedBox(height: 10),
+                card,
+              ],
               const SizedBox(height: 24),
 
               const SectionHeader(title: 'This Week'),
@@ -136,8 +150,47 @@ class HomeTab extends StatelessWidget {
             ],
           );
         },
+        ),
       ),
     );
+  }
+
+  /// A real running achievement from recorded runs, or null when none exist
+  /// yet -- rather than the old hardcoded "5K in 24 min".
+  Widget? _runAchievement(BuildContext context) {
+    final c = context.movara;
+    final longest = runStore.longestRun;
+    if (longest == null || longest.distanceKm < 0.1) return null;
+
+    final fastest = runStore.fastestPace;
+    if (fastest != null) {
+      return AchievementCard(
+        emoji: '⚡',
+        title: 'Best Pace',
+        description: '${formatPace(fastest.paceSecondsPerKm)} /km over '
+            '${fastest.distanceKm.toStringAsFixed(1)} km',
+        date: _relativeDay(fastest.startedAt),
+        tint: c.blueSoft,
+      );
+    }
+    return AchievementCard(
+      emoji: '🏃',
+      title: 'Longest Run',
+      description: '${longest.distanceKm.toStringAsFixed(2)} km',
+      date: _relativeDay(longest.startedAt),
+      tint: c.blueSoft,
+    );
+  }
+
+  static String _relativeDay(DateTime when) {
+    final today = DateTime.now();
+    final days = DateTime(today.year, today.month, today.day)
+        .difference(DateTime(when.year, when.month, when.day))
+        .inDays;
+    if (days <= 0) return 'Today';
+    if (days == 1) return 'Yesterday';
+    if (days < 7) return '$days days ago';
+    return '${when.day}/${when.month}';
   }
 }
 

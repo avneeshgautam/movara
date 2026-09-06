@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
 
+import '../models/reminder.dart';
 import '../services/reminder_scheduler.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 
-/// Water reminder settings: pick how often it repeats, then switch it on.
+/// Lists the user's reminders and lets them add, edit, toggle and delete
+/// custom ones. The single water reminder from earlier builds is migrated in
+/// as the first item.
 class RemindersTab extends StatelessWidget {
   const RemindersTab({super.key, required this.scheduler});
 
@@ -18,29 +21,80 @@ class RemindersTab extends StatelessWidget {
     return AnimatedBuilder(
       animation: scheduler,
       builder: (context, _) {
+        final reminders = scheduler.reminders;
+
         return Container(
           color: c.bg,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
             children: [
-              Text(
-                'STAY HYDRATED',
-                style: TextStyle(
-                    color: c.textMuted, fontSize: 10, letterSpacing: 1.6),
-              ),
+              Text('STAY ON TRACK',
+                  style: TextStyle(
+                      color: c.textMuted, fontSize: 10, letterSpacing: 1.6)),
               const SizedBox(height: 2),
-              Text(
-                'Reminders',
-                style: AppTheme.display(
-                  color: c.textPrimary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
+              Text('Reminders',
+                  style: AppTheme.display(
+                      color: c.textPrimary,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800)),
+              const SizedBox(height: 16),
+
+              if (_banner(context) case final banner?) ...[
+                banner,
+                const SizedBox(height: 16),
+              ],
+
+              if (reminders.isEmpty)
+                _empty(context)
+              else
+                for (final r in reminders) ...[
+                  _ReminderCard(
+                    reminder: r,
+                    onToggle: (on) => scheduler.setReminderEnabled(r.id, on),
+                    onEdit: () => _openDialog(context, existing: r),
+                    onDelete: () => _confirmDelete(context, r),
+                    switchBuilder: _switch,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+              const SizedBox(height: 4),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _openDialog(context),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add reminder'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: c.accent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    textStyle: AppTheme.display(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
-              const SizedBox(height: 20),
-              _waterCard(context),
-              const SizedBox(height: 16),
-              _statusCard(context),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _sendTest(context),
+                  icon: const Icon(Icons.notifications_active_outlined, size: 18),
+                  label: const Text('Send a test reminder'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: c.accent,
+                    side: BorderSide(color: c.accent.withValues(alpha: 0.5)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
             ],
           ),
         );
@@ -48,191 +102,113 @@ class RemindersTab extends StatelessWidget {
     );
   }
 
-  Widget _waterCard(BuildContext context) {
-    final c = context.movara;
+  Widget? _banner(BuildContext context) {
+    if (!scheduler.isSupported) {
+      return _note(context,
+          'Reminders are not supported on this device. Install the app to get them.');
+    }
+    if (scheduler.permission == 'denied') {
+      return _note(context,
+          'Notifications are turned off for Movara. Enable them in Settings to '
+          'get reminders.');
+    }
+    return null;
+  }
 
+  Widget _note(BuildContext context, String text) {
+    final c = context.movara;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: c.surface,
-        border: Border.all(color: scheduler.enabled ? c.accent : c.border),
-        borderRadius: BorderRadius.circular(18),
+        color: c.surface2,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
-          Container(
-            width: 46,
-            height: 46,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: scheduler.enabled ? c.accentSoft : c.surface2,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Text('💧', style: TextStyle(fontSize: 22)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Water Reminder',
-                  style: AppTheme.display(
-                    color: c.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  scheduler.enabled ? 'On' : 'Off',
-                  style: TextStyle(color: c.textSecondary, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Timing control sits before the toggle so the interval is chosen
-          // first, then switched on.
-          _intervalDropdown(context),
+          Icon(Icons.info_outline, size: 16, color: c.textMuted),
           const SizedBox(width: 10),
-          _switch(
-            context,
-            scheduler.enabled,
-            () => scheduler.setEnabled(!scheduler.enabled),
+          Expanded(
+            child: Text(text,
+                style: TextStyle(
+                    color: c.textSecondary, fontSize: 12, height: 1.4)),
           ),
         ],
       ),
     );
   }
 
-  Widget _intervalDropdown(BuildContext context) {
+  Widget _empty(BuildContext context) {
     final c = context.movara;
-
-    return PopupMenuButton<int>(
-      tooltip: 'Reminder interval',
-      color: c.surface,
-      position: PopupMenuPosition.under,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      onSelected: (value) {
-        if (value == -1) {
-          _promptCustomInterval(context);
-        } else {
-          scheduler.setIntervalMinutes(value);
-        }
-      },
-      itemBuilder: (context) => [
-        for (final minutes in ReminderScheduler.intervalOptions)
-          PopupMenuItem<int>(
-            value: minutes,
-            child: Row(
-              children: [
-                Icon(
-                  scheduler.intervalMinutes == minutes
-                      ? Icons.check
-                      : Icons.schedule,
-                  size: 16,
-                  color: scheduler.intervalMinutes == minutes
-                      ? c.accent
-                      : c.textMuted,
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  formatInterval(minutes),
-                  style: TextStyle(
-                    color: c.textPrimary,
-                    fontWeight: scheduler.intervalMinutes == minutes
-                        ? FontWeight.w700
-                        : FontWeight.w400,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        const PopupMenuDivider(),
-        PopupMenuItem<int>(
-          value: -1,
-          child: Row(
-            children: [
-              Icon(Icons.edit_outlined, size: 16, color: c.textMuted),
-              const SizedBox(width: 10),
-              Text('Custom…', style: TextStyle(color: c.textPrimary)),
-            ],
-          ),
-        ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: c.surface2,
-          border: Border.all(color: c.border),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              scheduler.intervalLabel,
-              style: AppTheme.display(
-                color: c.textPrimary,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(width: 3),
-            Icon(Icons.arrow_drop_down, size: 18, color: c.textMuted),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        children: [
+          const Text('🔔', style: TextStyle(fontSize: 28)),
+          const SizedBox(height: 10),
+          Text('No reminders yet',
+              style: AppTheme.display(color: c.textPrimary, fontSize: 15)),
+          const SizedBox(height: 4),
+          Text('Add one to be nudged — water, stretch, a walk, anything.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: c.textSecondary, fontSize: 12)),
+        ],
       ),
     );
   }
 
-  Future<void> _promptCustomInterval(BuildContext context) async {
-    final c = context.movara;
-    final controller =
-        TextEditingController(text: '${scheduler.intervalMinutes}');
-
-    final minutes = await showDialog<int>(
+  Future<void> _openDialog(BuildContext context, {Reminder? existing}) async {
+    final result = await showDialog<_ReminderInput>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: c.surface,
-        title: Text('Remind me every',
-            style: AppTheme.display(color: c.textPrimary, fontSize: 16)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            hintText: 'e.g. 30',
-            suffixText: 'minutes',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(context, int.tryParse(controller.text.trim())),
-            child: const Text('Set'),
-          ),
-        ],
-      ),
+      builder: (_) => _ReminderDialog(existing: existing),
     );
+    if (result == null) return;
 
-    if (minutes != null && minutes > 0) {
-      await scheduler.setIntervalMinutes(minutes);
+    if (existing == null) {
+      await scheduler.addReminder(
+          label: result.label, intervalMinutes: result.minutes);
+    } else {
+      await scheduler.updateReminder(existing.id,
+          label: result.label, intervalMinutes: result.minutes);
     }
   }
 
-  /// Sends a test reminder and says what happened. Silence used to be the
-  /// only feedback, which is indistinguishable from the feature being broken.
+  Future<void> _confirmDelete(BuildContext context, Reminder r) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final c = ctx.movara;
+        return AlertDialog(
+          backgroundColor: c.surface,
+          title: Text('Delete reminder?',
+              style: AppTheme.display(color: c.textPrimary, fontSize: 16)),
+          content: Text('“${r.label}” will be removed.',
+              style: TextStyle(color: c.textSecondary)),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text('Cancel', style: TextStyle(color: c.textMuted))),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Delete',
+                    style: TextStyle(color: Color(0xFFEF4444)))),
+          ],
+        );
+      },
+    );
+    if (ok == true) await scheduler.removeReminder(r.id);
+  }
+
   Future<void> _sendTest(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     final sent = await scheduler.sendTest();
     if (!context.mounted) return;
-
     messenger.showSnackBar(SnackBar(
       content: Text(sent
           ? 'Test reminder sent.'
@@ -244,105 +220,10 @@ class RemindersTab extends StatelessWidget {
     ));
   }
 
-  Widget _statusCard(BuildContext context) {
-    final c = context.movara;
-    final due = scheduler.nextDue;
-    final blocked = scheduler.permission == 'denied';
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.surface,
-        border: Border.all(color: c.border),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.repeat, size: 16, color: c.textMuted),
-              const SizedBox(width: 8),
-              Text(
-                'Every ${scheduler.intervalLabel}',
-                style: TextStyle(color: c.textSecondary, fontSize: 13),
-              ),
-            ],
-          ),
-          if (scheduler.enabled && due != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.schedule, size: 16, color: c.accent),
-                const SizedBox(width: 8),
-                Text(
-                  'Next reminder at ${DateFormat.jm().format(due)}',
-                  style: TextStyle(color: c.textPrimary, fontSize: 13),
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 12),
-          if (blocked)
-            _note(
-              context,
-              Icons.notifications_off,
-              'Notifications are blocked for this site. Enable them in your '
-              'browser settings for Movara, then turn the reminder on again.',
-              const Color(0xFFEF4444),
-            )
-          else
-            _note(
-              context,
-              Icons.info_outline,
-              'Reminders fire while Movara is open in your browser. A web app '
-              'cannot wake a closed tab, so keep it open (or added to your '
-              'home screen) to be reminded. Anything due while it was closed '
-              'shows the next time you open it.',
-              c.textSecondary,
-            ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _sendTest(context),
-              icon: const Icon(Icons.notifications_active_outlined, size: 18),
-              label: const Text('Send a test reminder'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: c.accent,
-                side: BorderSide(color: c.accent.withValues(alpha: 0.5)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _note(
-      BuildContext context, IconData icon, String text, Color colour) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 15, color: colour),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(color: colour, fontSize: 11, height: 1.45),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _switch(BuildContext context, bool on, VoidCallback onTap) {
+  Widget _switch(BuildContext context, bool on, ValueChanged<bool> onChanged) {
     final c = context.movara;
     return GestureDetector(
-      onTap: onTap,
+      onTap: () => onChanged(!on),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         width: 44,
@@ -362,13 +243,218 @@ class RemindersTab extends StatelessWidget {
                 width: 18,
                 height: 18,
                 decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
+                    color: Colors.white, shape: BoxShape.circle),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ReminderCard extends StatelessWidget {
+  const _ReminderCard({
+    required this.reminder,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+    required this.switchBuilder,
+  });
+
+  final Reminder reminder;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final Widget Function(BuildContext, bool, ValueChanged<bool>) switchBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: c.accentSoft, shape: BoxShape.circle),
+            child: const Text('🔔', style: TextStyle(fontSize: 16)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: GestureDetector(
+              onTap: onEdit,
+              behavior: HitTestBehavior.opaque,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(reminder.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.display(
+                          color: c.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text('Every ${formatInterval(reminder.intervalMinutes)}',
+                      style: TextStyle(color: c.textMuted, fontSize: 12)),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 18),
+            color: c.textMuted,
+            onPressed: onDelete,
+          ),
+          switchBuilder(context, reminder.enabled, onToggle),
+          const SizedBox(width: 4),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReminderInput {
+  const _ReminderInput(this.label, this.minutes);
+  final String label;
+  final int minutes;
+}
+
+/// Add / edit sheet: a label and an interval (a preset or a typed value).
+class _ReminderDialog extends StatefulWidget {
+  const _ReminderDialog({this.existing});
+
+  final Reminder? existing;
+
+  @override
+  State<_ReminderDialog> createState() => _ReminderDialogState();
+}
+
+class _ReminderDialogState extends State<_ReminderDialog> {
+  late final TextEditingController _label =
+      TextEditingController(text: widget.existing?.label ?? '');
+  late final TextEditingController _custom = TextEditingController();
+  late int _minutes =
+      widget.existing?.intervalMinutes ?? ReminderScheduler.defaultIntervalMinutes;
+
+  @override
+  void dispose() {
+    _label.dispose();
+    _custom.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final typed = int.tryParse(_custom.text.trim());
+    final minutes = (typed ?? _minutes).clamp(
+        ReminderScheduler.minIntervalMinutes,
+        ReminderScheduler.maxIntervalMinutes);
+    Navigator.pop(context, _ReminderInput(_label.text, minutes));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+    final isEdit = widget.existing != null;
+
+    return AlertDialog(
+      backgroundColor: c.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(isEdit ? 'Edit reminder' : 'New reminder',
+          style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _label,
+              autofocus: !isEdit,
+              textCapitalization: TextCapitalization.sentences,
+              style: TextStyle(color: c.textPrimary),
+              decoration: InputDecoration(
+                labelText: 'What for?',
+                hintText: 'e.g. Drink water, Stretch, Walk',
+                labelStyle: TextStyle(color: c.textMuted),
+                hintStyle: TextStyle(color: c.textMuted.withValues(alpha: 0.6)),
+                focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: c.accent)),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text('REMIND ME EVERY',
+                style: TextStyle(
+                    color: c.textMuted, fontSize: 10, letterSpacing: 1.4)),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final m in ReminderScheduler.intervalOptions)
+                  _chip(context, formatInterval(m), _minutes == m && _custom.text.isEmpty,
+                      () {
+                    setState(() {
+                      _minutes = m;
+                      _custom.clear();
+                    });
+                  }),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _custom,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              style: TextStyle(color: c.textPrimary),
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: 'Custom (minutes)',
+                labelStyle: TextStyle(color: c.textMuted),
+                focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: c.accent)),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: c.textMuted))),
+        ElevatedButton(
+          onPressed: _save,
+          style: ElevatedButton.styleFrom(
+              backgroundColor: c.accent, foregroundColor: Colors.white),
+          child: Text(isEdit ? 'Save' : 'Add'),
+        ),
+      ],
+    );
+  }
+
+  Widget _chip(BuildContext context, String label, bool selected, VoidCallback onTap) {
+    final c = context.movara;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? c.accent : c.surface2,
+          border: Border.all(color: selected ? c.accent : c.border),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(label,
+            style: AppTheme.display(
+                color: selected ? Colors.white : c.textSecondary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600)),
       ),
     );
   }

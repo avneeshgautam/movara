@@ -83,18 +83,29 @@ class WaterNotifications {
     );
   }
 
-  /// Replaces any pending reminders with a fresh series [everyMinutes] apart.
-  Future<void> schedule(int everyMinutes) async {
+  /// The most notifications one reminder may queue. iOS caps an app at 64
+  /// pending, so the scheduler shares this budget across reminders.
+  static const maxSeries = _maxScheduled;
+
+  /// Queues a rolling series for one reminder: [count] notifications
+  /// [everyMinutes] apart, with ids namespaced by [baseId] so they can be
+  /// cancelled without touching other reminders.
+  Future<void> scheduleReminder({
+    required int baseId,
+    required String title,
+    required String body,
+    required int everyMinutes,
+    required int count,
+  }) async {
     if (!isSupported) return;
     await _ensureInit();
-    await cancelAll();
 
     final now = tz.TZDateTime.now(tz.local);
-    for (var i = 1; i <= _maxScheduled; i++) {
+    for (var i = 1; i <= count; i++) {
       await _plugin.zonedSchedule(
-        id: i,
-        title: 'Time for water',
-        body: 'Stay hydrated — drink a glass of water.',
+        id: baseId * 1000 + i,
+        title: title,
+        body: body,
         scheduledDate: now.add(Duration(minutes: everyMinutes * i)),
         notificationDetails: _details,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
