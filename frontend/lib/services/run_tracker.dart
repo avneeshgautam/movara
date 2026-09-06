@@ -38,7 +38,14 @@ class RunTracker extends ChangeNotifier {
   static const _accuracyStepFactor = 0.5;
 
   TrackerState _state = TrackerState.idle;
-  Duration _elapsed = Duration.zero;
+
+  /// When recording began, and time banked from earlier running segments.
+  /// Elapsed time is derived from the wall clock rather than counted with the
+  /// ticker: browsers throttle timers in a hidden tab and stop them when the
+  /// screen locks, so a counted clock loses most of a pocketed run.
+  DateTime? _startedAt;
+  DateTime? _segmentStart;
+  Duration _banked = Duration.zero;
   double _distanceMeters = 0;
   final List<RunPoint> _route = [];
   RunPoint? _current;
@@ -46,7 +53,14 @@ class RunTracker extends ChangeNotifier {
   double? _accuracyMetres;
 
   TrackerState get state => _state;
-  Duration get elapsed => _elapsed;
+  Duration get elapsed {
+    final segment = _segmentStart;
+    if (segment == null) return _banked;
+    return _banked + DateTime.now().difference(segment);
+  }
+
+  /// When this run began, or null if nothing is being recorded.
+  DateTime? get startedAt => _startedAt;
   double get distanceMeters => _distanceMeters;
   double get distanceKm => _distanceMeters / 1000;
   List<RunPoint> get route => List.unmodifiable(_route);
@@ -66,7 +80,7 @@ class RunTracker extends ChangeNotifier {
 
   /// Seconds per km so far.
   double get paceSecondsPerKm =>
-      distanceKm > 0.05 ? _elapsed.inSeconds / distanceKm : 0;
+      distanceKm > 0.05 ? elapsed.inSeconds / distanceKm : 0;
 
   int get estimatedCalories => (distanceKm * 65).round();
 
@@ -99,11 +113,12 @@ class RunTracker extends ChangeNotifier {
     }
 
     _state = TrackerState.running;
+    _startedAt = DateTime.now();
+    _segmentStart = _startedAt;
+    // The ticker only drives the display. Losing ticks to a throttled tab
+    // makes the readout update less often, never makes it wrong.
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_state == TrackerState.running) {
-        _elapsed += const Duration(seconds: 1);
-        notifyListeners();
-      }
+      if (_state == TrackerState.running) notifyListeners();
     });
     notifyListeners();
   }
@@ -156,12 +171,18 @@ class RunTracker extends ChangeNotifier {
 
   void pause() {
     if (_state != TrackerState.running) return;
+    final segment = _segmentStart;
+    if (segment != null) {
+      _banked += DateTime.now().difference(segment);
+      _segmentStart = null;
+    }
     _state = TrackerState.paused;
     notifyListeners();
   }
 
   void resume() {
     if (_state != TrackerState.paused) return;
+    _segmentStart = DateTime.now();
     _state = TrackerState.running;
     notifyListeners();
   }
@@ -170,17 +191,22 @@ class RunTracker extends ChangeNotifier {
   /// was captured.
   RunRecord? finish() {
     _stopStreams();
+
+    final total = elapsed;
+    final began = _startedAt ?? DateTime.now().subtract(total);
+    _banked = total;
+    _segmentStart = null;
     _state = TrackerState.idle;
 
-    if (_route.isEmpty && _elapsed.inSeconds < 1) {
+    if (_route.isEmpty && total.inSeconds < 1) {
       notifyListeners();
       return null;
     }
 
     final run = RunRecord(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
-      startedAt: DateTime.now().subtract(_elapsed),
-      elapsedSeconds: _elapsed.inSeconds,
+      startedAt: began,
+      elapsedSeconds: total.inSeconds,
       distanceMeters: _distanceMeters,
       route: List.of(_route),
     );
@@ -196,7 +222,9 @@ class RunTracker extends ChangeNotifier {
 
   void _reset() {
     _state = TrackerState.idle;
-    _elapsed = Duration.zero;
+    _startedAt = null;
+    _segmentStart = null;
+    _banked = Duration.zero;
     _distanceMeters = 0;
     _route.clear();
     _current = null;

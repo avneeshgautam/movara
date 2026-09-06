@@ -2,6 +2,44 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:movara_app/services/reminder_scheduler.dart';
+import 'package:movara_app/services/water_notifications.dart';
+
+/// Stands in for the platform, recording what it was asked to do.
+class _FakeNotifications implements WaterNotifications {
+  _FakeNotifications({this.supported = true, this.grants = true});
+
+  final bool supported;
+  final bool grants;
+
+  String _permission = 'default';
+  final List<String> shown = [];
+  int permissionRequests = 0;
+
+  @override
+  bool get isSupported => supported;
+
+  @override
+  bool get schedulesInBackground => false;
+
+  @override
+  String get permission => _permission;
+
+  @override
+  Future<String> requestPermission() async {
+    permissionRequests++;
+    _permission = grants ? 'granted' : 'denied';
+    return _permission;
+  }
+
+  @override
+  Future<void> show(String title, String body) async => shown.add(title);
+
+  @override
+  Future<void> schedule(int everyMinutes) async {}
+
+  @override
+  Future<void> cancelAll() async {}
+}
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -134,6 +172,53 @@ void main() {
       expect(formatInterval(60), '1 hour');
       expect(formatInterval(120), '2 hours');
       expect(formatInterval(90), '1h 30m');
+    });
+  });
+
+  group('the test reminder button', () {
+    test('asks for permission first, then sends', () async {
+      final fake = _FakeNotifications();
+      final s = ReminderScheduler(notifications: fake);
+      await s.load();
+
+      // Regression: this used to call show() with no permission, which iOS
+      // drops silently -- the button appeared to do nothing at all.
+      expect(await s.sendTest(), isTrue);
+      expect(fake.permissionRequests, 1);
+      expect(fake.shown, hasLength(1));
+      s.dispose();
+    });
+
+    test('reports failure when permission is refused', () async {
+      final fake = _FakeNotifications(grants: false);
+      final s = ReminderScheduler(notifications: fake);
+      await s.load();
+
+      expect(await s.sendTest(), isFalse);
+      expect(fake.shown, isEmpty, reason: 'nothing to send without permission');
+      s.dispose();
+    });
+
+    test('reports failure where notifications are unsupported', () async {
+      final fake = _FakeNotifications(supported: false);
+      final s = ReminderScheduler(notifications: fake);
+      await s.load();
+
+      expect(await s.sendTest(), isFalse);
+      expect(fake.permissionRequests, 0);
+      s.dispose();
+    });
+
+    test('does not ask again once permission is granted', () async {
+      final fake = _FakeNotifications();
+      final s = ReminderScheduler(notifications: fake);
+      await s.load();
+
+      await s.sendTest();
+      await s.sendTest();
+      expect(fake.permissionRequests, 1);
+      expect(fake.shown, hasLength(2));
+      s.dispose();
     });
   });
 }

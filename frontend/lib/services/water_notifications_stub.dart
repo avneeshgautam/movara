@@ -1,4 +1,5 @@
-/// No-op implementation for non-web targets (and the test VM).
+/// No-op implementation for platforms with no notification support (and the
+/// test VM).
 class WaterNotifications {
   const WaterNotifications();
 
@@ -9,5 +10,13 @@ class WaterNotifications {
 
   Future<String> requestPermission() async => 'unsupported';
 
-  void show(String title, String body) {}
+  Future<void> show(String title, String body) async {}
+
+  /// True when the platform delivers reminders itself, so the app does not
+  /// have to be open for one to arrive.
+  bool get schedulesInBackground => false;
+
+  Future<void> schedule(int everyMinutes) async {}
+
+  Future<void> cancelAll() async {}
 }

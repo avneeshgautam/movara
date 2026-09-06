@@ -29,7 +29,7 @@ class WaterNotifications {
     }
   }
 
-  void show(String title, String body) {
+  Future<void> show(String title, String body) async {
     if (permission != 'granted') return;
     try {
       web.Notification(title, web.NotificationOptions(body: body));
@@ -37,4 +37,12 @@ class WaterNotifications {
       // Some browsers require a service worker for notifications; ignore.
     }
   }
+
+  /// A browser cannot wake a closed tab, so reminders are fired by the app's
+  /// own timer and only catch up when it is reopened.
+  bool get schedulesInBackground => false;
+
+  Future<void> schedule(int everyMinutes) async {}
+
+  Future<void> cancelAll() async {}
 }

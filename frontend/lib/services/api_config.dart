@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
 
-/// Base URL of the Spring Boot backend.
+/// Base URL of the FastAPI backend.
 ///
 /// - Web / desktop / iOS simulator: the backend on the same machine is
 ///   reachable at `localhost`.
+/// - A physical iPhone: `localhost` is the phone, so the deployed backend
+///   must be supplied explicitly. run-ios.sh does this.
 /// - Android emulator: `localhost` refers to the emulator itself, so the
 ///   host machine is reached via the special alias `10.0.2.2` instead.
 ///

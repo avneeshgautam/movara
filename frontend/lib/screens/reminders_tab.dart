@@ -226,6 +226,24 @@ class RemindersTab extends StatelessWidget {
     }
   }
 
+  /// Sends a test reminder and says what happened. Silence used to be the
+  /// only feedback, which is indistinguishable from the feature being broken.
+  Future<void> _sendTest(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final sent = await scheduler.sendTest();
+    if (!context.mounted) return;
+
+    messenger.showSnackBar(SnackBar(
+      content: Text(sent
+          ? 'Test reminder sent.'
+          : scheduler.isSupported
+              ? 'Notifications are turned off for Movara. Enable them in '
+                  'Settings to get reminders.'
+              : 'Reminders are not supported on this device.'),
+      duration: const Duration(seconds: 4),
+    ));
+  }
+
   Widget _statusCard(BuildContext context) {
     final c = context.movara;
     final due = scheduler.nextDue;
@@ -287,7 +305,7 @@ class RemindersTab extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: scheduler.sendTest,
+              onPressed: () => _sendTest(context),
               icon: const Icon(Icons.notifications_active_outlined, size: 18),
               label: const Text('Send a test reminder'),
               style: OutlinedButton.styleFrom(

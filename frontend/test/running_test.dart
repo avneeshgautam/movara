@@ -367,6 +367,70 @@ void main() {
       tracker.dispose();
     });
 
+
+    test('the clock follows real time, not how often the app was awake',
+        () async {
+      // Regression: elapsed used to be counted one tick at a time. Browsers
+      // throttle timers in a hidden tab and stop them when the screen locks,
+      // so a ten minute walk with the phone pocketed reported about two.
+      // fakeAsync is not used here on purpose: this asserts the value comes
+      // from the wall clock, so no ticker needs to have run.
+      final tracker = RunTracker(
+        positionStream: () => const Stream<Position>.empty(),
+        ensurePermission: () async => true,
+      );
+      await tracker.start();
+      final atStart = tracker.elapsed;
+
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+
+      expect(atStart.inMilliseconds, lessThan(100));
+      expect(tracker.elapsed.inMilliseconds, greaterThanOrEqualTo(1000),
+          reason: 'a second of real time must show up as a second');
+      tracker.dispose();
+    });
+
+    test('paused time is not counted', () async {
+      final tracker = RunTracker(
+        positionStream: () => const Stream<Position>.empty(),
+        ensurePermission: () async => true,
+      );
+      await tracker.start();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      tracker.pause();
+      final atPause = tracker.elapsed;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+
+      expect(tracker.elapsed, atPause,
+          reason: 'the clock must stand still while paused');
+
+      tracker.resume();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(tracker.elapsed, greaterThan(atPause));
+      // The 500ms pause must not appear in the total.
+      expect(tracker.elapsed.inMilliseconds, lessThan(900));
+      tracker.dispose();
+    });
+
+    test('the finished run carries the real duration and start time',
+        () async {
+      final tracker = RunTracker(
+        positionStream: () => const Stream<Position>.empty(),
+        ensurePermission: () async => true,
+      );
+      final before = DateTime.now();
+      await tracker.start();
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+
+      final run = tracker.finish();
+      expect(run, isNotNull);
+      expect(run!.elapsedSeconds, greaterThanOrEqualTo(1));
+      expect(run.startedAt.isBefore(before.add(const Duration(seconds: 1))),
+          isTrue, reason: 'startedAt is when recording began');
+      tracker.dispose();
+    });
+
     test('pausing stops the route growing, resuming continues it', () async {
       final positions = StreamController<Position>.broadcast();
       final tracker = RunTracker(

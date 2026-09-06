@@ -69,7 +69,14 @@ class ReminderScheduler extends ChangeNotifier {
     _nextDue = due == null ? null : DateTime.fromMillisecondsSinceEpoch(due);
     _loaded = true;
 
-    if (_enabled) _startTicker();
+    if (_enabled) {
+      _startTicker();
+      // Only a limited run of reminders can be queued with the OS at once,
+      // so top the queue up whenever the app is opened.
+      if (_notifications.schedulesInBackground) {
+        await _notifications.schedule(_intervalMinutes);
+      }
+    }
     _fireIfDue();
     notifyListeners();
   }
@@ -82,9 +89,13 @@ class ReminderScheduler extends ChangeNotifier {
       }
       _nextDue = DateTime.now().add(Duration(minutes: _intervalMinutes));
       _startTicker();
+      if (_notifications.schedulesInBackground) {
+        await _notifications.schedule(_intervalMinutes);
+      }
     } else {
       _nextDue = null;
       _stopTicker();
+      await _notifications.cancelAll();
     }
     await _persist();
     notifyListeners();
@@ -98,16 +109,32 @@ class ReminderScheduler extends ChangeNotifier {
     // Re-base the countdown so a change takes effect immediately.
     if (_enabled) {
       _nextDue = DateTime.now().add(Duration(minutes: _intervalMinutes));
+      if (_notifications.schedulesInBackground) {
+        await _notifications.schedule(_intervalMinutes);
+      }
     }
     await _persist();
     notifyListeners();
   }
 
-  void sendTest() {
-    _notifications.show(
+  /// Sends a one-off reminder now. Returns false when the platform will not
+  /// deliver it, so the UI can say why instead of appearing to do nothing.
+  Future<bool> sendTest() async {
+    if (!_notifications.isSupported) return false;
+
+    // iOS drops notifications silently when permission was never granted,
+    // and the toggle is what normally asks for it -- so ask here too.
+    if (_notifications.permission != 'granted') {
+      final result = await _notifications.requestPermission();
+      notifyListeners();
+      if (result != 'granted') return false;
+    }
+
+    await _notifications.show(
       'Time to drink water 💧',
       'This is a test reminder from Movara.',
     );
+    return true;
   }
 
   /// Fires and re-schedules if the due time has passed.
@@ -116,10 +143,14 @@ class ReminderScheduler extends ChangeNotifier {
     final due = _nextDue;
     if (due == null || DateTime.now().isBefore(due)) return;
 
-    _notifications.show(
-      'Time to drink water 💧',
-      'Stay hydrated — next reminder in $intervalLabel.',
-    );
+    // When the OS holds the schedule it has already delivered this one;
+    // firing again here would double up.
+    if (!_notifications.schedulesInBackground) {
+      _notifications.show(
+        'Time to drink water 💧',
+        'Stay hydrated — next reminder in $intervalLabel.',
+      );
+    }
     _nextDue = DateTime.now().add(Duration(minutes: _intervalMinutes));
     _persist();
     notifyListeners();
