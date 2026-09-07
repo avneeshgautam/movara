@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -991,7 +993,11 @@ class _SharePreviewState extends State<_SharePreview> {
   bool _saving = false;
   String? _error;
 
-  Future<void> _save() async {
+  String get _fileName =>
+      'movara-run-${DateFormat('yyyy-MM-dd').format(widget.run.startedAt)}.png';
+
+  Future<void> _run(Future<bool> Function(Uint8List, String) action,
+      {required String okMessage, required String failMessage}) async {
     setState(() {
       _saving = true;
       _error = null;
@@ -1000,17 +1006,15 @@ class _SharePreviewState extends State<_SharePreview> {
       final bytes = await captureShareCard(_cardKey);
       if (bytes == null) throw StateError('nothing to capture');
 
-      final name =
-          'movara-run-${DateFormat('yyyy-MM-dd').format(widget.run.startedAt)}.png';
-      final saved = await const ShareImage().save(bytes, name);
+      final ok = await action(bytes, _fileName);
       if (!mounted) return;
 
-      if (saved) {
+      if (ok) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Saved $name')));
+            .showSnackBar(SnackBar(content: Text(okMessage)));
       } else {
-        setState(() => _error = 'Saving images is not supported here.');
+        setState(() => _error = failMessage);
       }
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not create the image.');
@@ -1018,6 +1022,18 @@ class _SharePreviewState extends State<_SharePreview> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  Future<void> _saveToPhotos() => _run(
+        (b, n) => const ShareImage().saveToPhotos(b, n),
+        okMessage: 'Saved to Photos',
+        failMessage: 'Could not save to Photos. Allow photo access in Settings.',
+      );
+
+  Future<void> _share() => _run(
+        (b, n) => const ShareImage().save(b, n),
+        okMessage: 'Shared',
+        failMessage: 'Sharing is not available here.',
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -1043,45 +1059,82 @@ class _SharePreviewState extends State<_SharePreview> {
             ],
             SizedBox(
               width: ShareCard.width,
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Text('Close',
-                            style: AppTheme.display(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700)),
+                  GestureDetector(
+                    onTap: _saving ? null : _saveToPhotos,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: c.accent,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.photo_library_outlined,
+                              size: 17, color: Colors.white),
+                          const SizedBox(width: 8),
+                          Text(_saving ? 'Saving…' : 'Save to Photos',
+                              style: AppTheme.display(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800)),
+                        ],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: GestureDetector(
-                      onTap: _saving ? null : _save,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: c.accent,
-                          borderRadius: BorderRadius.circular(14),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Text('Close',
+                                style: AppTheme.display(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700)),
+                          ),
                         ),
-                        child: Text(_saving ? 'Saving…' : 'Save PNG',
-                            style: AppTheme.display(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800)),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _saving ? null : _share,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.ios_share,
+                                    size: 16, color: Colors.white),
+                                const SizedBox(width: 6),
+                                Text('Share',
+                                    style: AppTheme.display(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

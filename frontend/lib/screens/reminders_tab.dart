@@ -58,6 +58,16 @@ class RemindersTab extends StatelessWidget {
                   const SizedBox(height: 12),
                 ],
 
+              if (_suggestions(context) case final chips?) ...[
+                const SizedBox(height: 4),
+                Text('QUICK ADD',
+                    style: TextStyle(
+                        color: c.textMuted, fontSize: 10, letterSpacing: 1.6)),
+                const SizedBox(height: 10),
+                chips,
+                const SizedBox(height: 16),
+              ],
+
               const SizedBox(height: 4),
               SizedBox(
                 width: double.infinity,
@@ -99,6 +109,50 @@ class RemindersTab extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  /// One-tap chips for common reminders the user hasn't added yet, or null
+  /// when they already have them all.
+  Widget? _suggestions(BuildContext context) {
+    final c = context.movara;
+    final remaining = ReminderScheduler.suggestions
+        .where((s) => !scheduler.hasReminderNamed(s.label))
+        .toList();
+    if (remaining.isEmpty) return null;
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final s in remaining)
+          GestureDetector(
+            onTap: () => scheduler.addReminder(
+                label: s.label, intervalMinutes: s.minutes),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: c.surface,
+                border: Border.all(color: c.border),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(s.emoji, style: const TextStyle(fontSize: 13)),
+                  const SizedBox(width: 6),
+                  Text(s.label,
+                      style: AppTheme.display(
+                          color: c.textPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 5),
+                  Icon(Icons.add, size: 14, color: c.accent),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 

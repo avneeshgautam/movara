@@ -29,6 +29,16 @@ class ReminderScheduler extends ChangeNotifier {
   /// still be typed.
   static const intervalOptions = [15, 30, 45, 60, 90, 120, 180];
 
+  /// Common reminders offered as one-tap suggestions.
+  static const suggestions = <({String emoji, String label, int minutes})>[
+    (emoji: '💧', label: 'Drink water', minutes: 45),
+    (emoji: '🧍', label: 'Stand up & stretch', minutes: 60),
+    (emoji: '🚶', label: 'Walk break', minutes: 90),
+    (emoji: '👀', label: 'Rest your eyes', minutes: 20),
+    (emoji: '🪑', label: 'Posture check', minutes: 30),
+    (emoji: '😮‍💨', label: 'Deep breaths', minutes: 120),
+  ];
+
   static const defaultIntervalMinutes = 30;
   static const minIntervalMinutes = 1;
   static const maxIntervalMinutes = 24 * 60;
@@ -49,6 +59,9 @@ class ReminderScheduler extends ChangeNotifier {
   List<Reminder> get reminders => List.unmodifiable(_reminders);
   bool get isLoaded => _loaded;
   bool get hasAnyEnabled => _reminders.any((r) => r.enabled);
+
+  bool hasReminderNamed(String label) => _reminders
+      .any((r) => r.label.toLowerCase() == label.trim().toLowerCase());
 
   bool get isSupported => _notifications.isSupported;
   String get permission => _notifications.permission;

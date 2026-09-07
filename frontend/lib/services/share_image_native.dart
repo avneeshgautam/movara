@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -31,6 +32,20 @@ class ShareImage {
       );
       // Dismissing the sheet is a deliberate choice, not a failure.
       return result.status != ShareResultStatus.unavailable;
+    } catch (_) {
+      return false;
+    }
+  }
+  /// Writes the image straight into the system photo library. Needs
+  /// NSPhotoLibraryAddUsageDescription in Info.plist; iOS shows the add-photo
+  /// permission prompt on first use.
+  Future<bool> saveToPhotos(Uint8List pngBytes, String filename) async {
+    try {
+      await Gal.putImageBytes(pngBytes, name: filename);
+      return true;
+    } on GalException {
+      // Permission refused, or the library rejected the write.
+      return false;
     } catch (_) {
       return false;
     }

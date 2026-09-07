@@ -41,6 +41,8 @@
 	<string>Movara keeps tracking your route while the app is in the background so your run is recorded with the screen off.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Movara uses your location to map the route of your run.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Movara saves your run cards to your photo library.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

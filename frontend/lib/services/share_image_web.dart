@@ -31,4 +31,7 @@ class ShareImage {
       return false;
     }
   }
+  /// Browsers have no photo library, so the closest thing is a download.
+  Future<bool> saveToPhotos(Uint8List pngBytes, String filename) =>
+      save(pngBytes, filename);
 }
