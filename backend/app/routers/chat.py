@@ -107,13 +107,22 @@ def _call_gemini(messages: list[dict]) -> str:
             "x-goog-api-key": config.GEMINI_API_KEY,
             "content-type": "application/json",
         },
-        json={
-            "system_instruction": {"parts": [{"text": _SYSTEM}]},
-            "contents": contents,
-            "generationConfig": {"maxOutputTokens": config.CHAT_MAX_TOKENS},
-        },
+        json=_gemini_body(contents, thinking=True),
         timeout=60,
     )
+    # Gemini 3's "thinking" adds latency and eats the output budget; asking for
+    # low thinking makes replies faster and stops them getting truncated.
+    # Older models reject thinkingConfig, so fall back without it on a 400.
+    if response.status_code == 400:
+        response = httpx.post(
+            url,
+            headers={
+                "x-goog-api-key": config.GEMINI_API_KEY,
+                "content-type": "application/json",
+            },
+            json=_gemini_body(contents, thinking=False),
+            timeout=60,
+        )
     _ensure_ok(response)
     data = response.json()
     candidates = data.get("candidates", [])
@@ -121,6 +130,17 @@ def _call_gemini(messages: list[dict]) -> str:
         return ""
     parts = candidates[0].get("content", {}).get("parts", [])
     return "".join(p.get("text", "") for p in parts).strip()
+
+
+def _gemini_body(contents: list[dict], *, thinking: bool) -> dict:
+    generation: dict = {"maxOutputTokens": config.CHAT_MAX_TOKENS}
+    if thinking:
+        generation["thinkingConfig"] = {"thinkingLevel": "low"}
+    return {
+        "system_instruction": {"parts": [{"text": _SYSTEM}]},
+        "contents": contents,
+        "generationConfig": generation,
+    }
 
 
 def _ensure_ok(response: httpx.Response) -> None:

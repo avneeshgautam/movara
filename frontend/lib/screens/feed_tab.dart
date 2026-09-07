@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../models/chat_message.dart';
 import '../services/api_service.dart';
@@ -125,14 +126,37 @@ class _FeedTabState extends State<FeedTab> {
             bottomRight: Radius.circular(user ? 4 : 16),
           ),
         ),
-        child: Text(
-          m.content,
-          style: TextStyle(
-            color: user ? Colors.white : c.textPrimary,
-            fontSize: 14,
-            height: 1.4,
-          ),
-        ),
+        child: user
+            ? Text(
+                m.content,
+                style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
+              )
+            : MarkdownBody(
+                data: m.content,
+                selectable: true,
+                styleSheet: MarkdownStyleSheet(
+                  p: TextStyle(color: c.textPrimary, fontSize: 14, height: 1.45),
+                  strong: TextStyle(
+                      color: c.textPrimary,
+                      fontSize: 14,
+                      height: 1.45,
+                      fontWeight: FontWeight.w700),
+                  em: TextStyle(
+                      color: c.textPrimary,
+                      fontSize: 14,
+                      fontStyle: FontStyle.italic),
+                  listBullet: TextStyle(color: c.textPrimary, fontSize: 14),
+                  h1: AppTheme.display(color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.w800),
+                  h2: AppTheme.display(color: c.textPrimary, fontSize: 16, fontWeight: FontWeight.w800),
+                  h3: AppTheme.display(color: c.textPrimary, fontSize: 15, fontWeight: FontWeight.w700),
+                  code: TextStyle(
+                      color: c.accent,
+                      backgroundColor: c.surface2,
+                      fontSize: 13),
+                  blockquote: TextStyle(color: c.textSecondary, fontSize: 14),
+                  listBulletPadding: const EdgeInsets.only(right: 6),
+                ),
+              ),
       ),
     );
   }
@@ -149,20 +173,7 @@ class _FeedTabState extends State<FeedTab> {
           border: Border.all(color: c.border),
           borderRadius: BorderRadius.circular(16),
         ),
-        child: SizedBox(
-          width: 34,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(
-              3,
-              (_) => Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(color: c.textMuted, shape: BoxShape.circle),
-              ),
-            ),
-          ),
-        ),
+        child: _TypingDots(color: c.textMuted),
       ),
     );
   }
@@ -292,6 +303,62 @@ class _FeedTabState extends State<FeedTab> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Three dots that rise in sequence -- the "assistant is typing" cue.
+class _TypingDots extends StatefulWidget {
+  const _TypingDots({required this.color});
+
+  final Color color;
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))
+        ..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 40,
+      height: 14,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(3, (i) {
+              // Each dot is a third of a cycle behind the previous one.
+              final t = (_c.value - i * 0.2) % 1.0;
+              final lift = (t < 0.5) ? (1 - (t * 2 - 0.5).abs() * 2) : 0.0;
+              return Transform.translate(
+                offset: Offset(0, -3 * lift),
+                child: Opacity(
+                  opacity: 0.4 + 0.6 * lift,
+                  child: Container(
+                    width: 7,
+                    height: 7,
+                    decoration:
+                        BoxDecoration(color: widget.color, shape: BoxShape.circle),
+                  ),
+                ),
+              );
+            }),
+          );
+        },
       ),
     );
   }

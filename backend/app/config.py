@@ -44,7 +44,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
 CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "").strip().lower()
-CHAT_MAX_TOKENS = int(os.getenv("CHAT_MAX_TOKENS", "600"))
+CHAT_MAX_TOKENS = int(os.getenv("CHAT_MAX_TOKENS", "800"))
 
 
 def chat_provider() -> str | None:
