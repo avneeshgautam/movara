@@ -53,8 +53,12 @@ class _FakeNotifications implements WaterNotifications {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  ReminderScheduler make([_FakeNotifications? fake]) =>
-      ReminderScheduler(notifications: fake ?? _FakeNotifications());
+  // Existing behaviour tests start from an empty list; seeding is covered
+  // separately below.
+  ReminderScheduler make([_FakeNotifications? fake]) => ReminderScheduler(
+        notifications: fake ?? _FakeNotifications(),
+        seedDefaults: false,
+      );
 
   group('formatInterval', () {
     test('formats minutes, hours and mixed', () {
@@ -225,6 +229,57 @@ void main() {
 
       expect(await s.sendTest(), isFalse);
       expect(fake.permissionRequests, 0);
+      s.dispose();
+    });
+  });
+
+  group('default water reminder seeding', () {
+    test('a fresh install gets a Drink water reminder, off', () async {
+      final s = ReminderScheduler(
+          notifications: _FakeNotifications(), seedDefaults: true);
+      await s.load();
+
+      expect(s.reminders, hasLength(1));
+      expect(s.reminders.single.label, 'Drink water');
+      expect(s.reminders.single.enabled, isFalse);
+      s.dispose();
+    });
+
+    test('an install that already saved an empty list still gets it once',
+        () async {
+      SharedPreferences.setMockInitialValues({'reminders_v2': '[]'});
+      final s = ReminderScheduler(
+          notifications: _FakeNotifications(), seedDefaults: true);
+      await s.load();
+      expect(s.reminders.map((r) => r.label), ['Drink water']);
+      s.dispose();
+    });
+
+    test('deleting the default keeps it gone across reloads', () async {
+      final first = ReminderScheduler(
+          notifications: _FakeNotifications(), seedDefaults: true);
+      await first.load();
+      await first.removeReminder(first.reminders.single.id);
+      first.dispose();
+
+      final second = ReminderScheduler(
+          notifications: _FakeNotifications(), seedDefaults: true);
+      await second.load();
+      expect(second.reminders, isEmpty,
+          reason: 'the seed is one-shot; a deleted default must not return');
+      second.dispose();
+    });
+
+    test('does not duplicate when a legacy reminder was migrated', () async {
+      SharedPreferences.setMockInitialValues({
+        'water_reminder_enabled': true,
+        'water_reminder_interval_minutes': 30,
+      });
+      final s = ReminderScheduler(
+          notifications: _FakeNotifications(), seedDefaults: true);
+      await s.load();
+      expect(s.reminders, hasLength(1));
+      expect(s.reminders.single.intervalMinutes, 30);
       s.dispose();
     });
   });

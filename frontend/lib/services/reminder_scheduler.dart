@@ -22,8 +22,11 @@ String formatInterval(int minutes) {
 /// On the web a timer fires due reminders and catches up on ones that came due
 /// while the tab was shut — a browser cannot wake a closed tab.
 class ReminderScheduler extends ChangeNotifier {
-  ReminderScheduler({WaterNotifications notifications = const WaterNotifications()})
-      : _notifications = notifications;
+  ReminderScheduler({
+    WaterNotifications notifications = const WaterNotifications(),
+    bool seedDefaults = true,
+  })  : _notifications = notifications,
+        _seedDefaults = seedDefaults;
 
   /// Presets offered when picking an interval, in minutes. Any other value can
   /// still be typed.
@@ -44,12 +47,15 @@ class ReminderScheduler extends ChangeNotifier {
   static const maxIntervalMinutes = 24 * 60;
 
   static const _kReminders = 'reminders_v2';
+  // Set once the default reminder has been offered, so deleting it is sticky.
+  static const _kSeeded = 'reminders_seeded_v1';
   // Legacy single-water-reminder keys, migrated once.
   static const _kLegacyEnabled = 'water_reminder_enabled';
   static const _kLegacyIntervalMinutes = 'water_reminder_interval_minutes';
   static const _kLegacyIntervalHours = 'water_reminder_interval_hours';
 
   final WaterNotifications _notifications;
+  final bool _seedDefaults;
   Timer? _ticker;
 
   List<Reminder> _reminders = [];
@@ -77,6 +83,25 @@ class ReminderScheduler extends ChangeNotifier {
       await _persist();
     }
     _nextNotifId = _reminders.fold<int>(0, (m, r) => r.notifId > m ? r.notifId : m) + 1;
+
+    // One-time default: give a new (or previously empty) install a water
+    // reminder to start from -- off, so nothing fires until the user opts in.
+    // The flag makes it a one-shot, so deleting it later actually sticks.
+    if (_seedDefaults && !(prefs.getBool(_kSeeded) ?? false)) {
+      if (_reminders.isEmpty) {
+        _reminders = [
+          Reminder(
+            id: _newId(),
+            notifId: _nextNotifId++,
+            label: 'Drink water',
+            intervalMinutes: 45,
+            enabled: false,
+          ),
+        ];
+        await _persist();
+      }
+      await prefs.setBool(_kSeeded, true);
+    }
     _loaded = true;
 
     if (hasAnyEnabled) _startTicker();
