@@ -1,7 +1,4 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../models/run_record.dart' show formatDuration;
 import '../services/workout_timer.dart';
@@ -22,56 +19,12 @@ class WorkoutTimerBar extends StatefulWidget {
 class _WorkoutTimerBarState extends State<WorkoutTimerBar> {
   static const _presets = [30, 60, 90, 120];
 
-  Timer? _restTicker;
-  DateTime? _restEnd;
-  int _restTotal = 0; // seconds, for the progress bar
-
-  @override
-  void dispose() {
-    _restTicker?.cancel();
-    super.dispose();
-  }
-
-  Duration get _restLeft {
-    final end = _restEnd;
-    if (end == null) return Duration.zero;
-    final left = end.difference(DateTime.now());
-    return left.isNegative ? Duration.zero : left;
-  }
-
-  void _startRest(int seconds) {
-    _restTicker?.cancel();
-    setState(() {
-      _restTotal = seconds;
-      _restEnd = DateTime.now().add(Duration(seconds: seconds));
-    });
-    _restTicker = Timer.periodic(const Duration(milliseconds: 200), (_) {
-      if (!mounted) return;
-      if (_restLeft == Duration.zero) {
-        _restTicker?.cancel();
-        HapticFeedback.heavyImpact(); // buzz when the rest is over
-        setState(() {
-          _restEnd = null;
-          _restTotal = 0;
-        });
-      } else {
-        setState(() {});
-      }
-    });
-  }
-
-  void _cancelRest() {
-    _restTicker?.cancel();
-    setState(() {
-      _restEnd = null;
-      _restTotal = 0;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = context.movara;
-    return Container(
+    return AnimatedBuilder(
+      animation: widget.stopwatch,
+      builder: (context, _) => Container(
       margin: const EdgeInsets.fromLTRB(20, 4, 20, 4),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -87,6 +40,7 @@ class _WorkoutTimerBarState extends State<WorkoutTimerBar> {
           const SizedBox(height: 12),
           _restRow(context),
         ],
+      ),
       ),
     );
   }
@@ -137,12 +91,12 @@ class _WorkoutTimerBarState extends State<WorkoutTimerBar> {
 
   Widget _restRow(BuildContext context) {
     final c = context.movara;
-    final resting = _restEnd != null;
+    final sw = widget.stopwatch;
+    final resting = sw.isResting;
 
     if (resting) {
-      final left = _restLeft;
-      final progress =
-          _restTotal == 0 ? 0.0 : left.inMilliseconds / (_restTotal * 1000);
+      final left = sw.restRemaining;
+      final progress = sw.restProgress;
       return Row(
         children: [
           Icon(Icons.hourglass_bottom, size: 18, color: c.green),
@@ -168,7 +122,7 @@ class _WorkoutTimerBarState extends State<WorkoutTimerBar> {
                   color: c.green, fontSize: 16, fontWeight: FontWeight.w800)),
           const SizedBox(width: 8),
           GestureDetector(
-            onTap: _cancelRest,
+            onTap: sw.cancelRest,
             child: Icon(Icons.close, size: 18, color: c.textMuted),
           ),
         ],
@@ -190,7 +144,7 @@ class _WorkoutTimerBarState extends State<WorkoutTimerBar> {
             children: [
               for (final s in _presets)
                 GestureDetector(
-                  onTap: () => _startRest(s),
+                  onTap: () => widget.stopwatch.startRest(s),
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

@@ -94,16 +94,12 @@ class _HomeShellState extends State<HomeShell> {
 
   /// The workout stopwatch + rest timer, opened from the header button.
   void _openTimer() {
-    final c = context.movara;
-    showModalBottomSheet<void>(
+    showDialog<void>(
       context: context,
-      backgroundColor: c.bg,
-      showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.only(bottom: 16),
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
         child: WorkoutTimerBar(stopwatch: _workoutTimer),
       ),
     );
@@ -313,30 +309,36 @@ class _TimerButton extends StatelessWidget {
     return AnimatedBuilder(
       animation: timer,
       builder: (context, _) {
+        // Rest countdown takes precedence (it's time-sensitive); otherwise the
+        // running stopwatch; otherwise just the icon.
+        final resting = timer.isResting;
         final running = timer.isRunning;
+        final active = resting || running;
+        final tint = resting ? c.green : c.accent;
+        final label = resting
+            ? formatDuration(timer.restRemaining)
+            : formatDuration(timer.elapsed);
         return GestureDetector(
           onTap: onTap,
           child: Container(
             height: 36,
-            padding: EdgeInsets.symmetric(horizontal: running ? 12 : 10),
+            padding: EdgeInsets.symmetric(horizontal: active ? 12 : 10),
             decoration: BoxDecoration(
-              color: running ? c.accentSoft : c.surface2,
-              border: Border.all(color: running ? c.accent : c.border),
+              color: active ? tint.withValues(alpha: 0.15) : c.surface2,
+              border: Border.all(color: active ? tint : c.border),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.timer_outlined,
-                    size: 18, color: running ? c.accent : c.textSecondary),
-                if (running) ...[
+                Icon(resting ? Icons.hourglass_bottom : Icons.timer_outlined,
+                    size: 18, color: active ? tint : c.textSecondary),
+                if (active) ...[
                   const SizedBox(width: 6),
                   Text(
-                    formatDuration(timer.elapsed),
+                    label,
                     style: AppTheme.display(
-                        color: c.accent,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800),
+                        color: tint, fontSize: 13, fontWeight: FontWeight.w800),
                   ),
                 ],
               ],
