@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import config, db
-from .routers import chat, exercises, workout_entries
+from .routers import chat, exercises, social, workout_entries
 
 
 @asynccontextmanager
@@ -75,3 +75,4 @@ def health() -> dict:
 app.include_router(exercises.router)
 app.include_router(workout_entries.router)
 app.include_router(chat.router)
+app.include_router(social.router)

@@ -10,6 +10,7 @@ import '../theme/movara_colors.dart';
 import '../widgets/movara_header.dart';
 import 'account_tab.dart';
 import 'feed_tab.dart';
+import 'leaderboard_tab.dart';
 import 'home_tab.dart';
 import 'reminders_tab.dart';
 import 'running_tab.dart';
@@ -50,6 +51,9 @@ class _HomeShellState extends State<HomeShell> {
     _entriesFuture = _api.fetchWorkoutEntries();
     _reminders.load();
     _runs.load();
+    // Register name/photo so this user shows on the leaderboard.
+    _api.upsertProfile(_displayName,
+        photoUrl: widget.auth.currentUser?.photoURL);
   }
 
   @override
@@ -80,6 +84,28 @@ class _HomeShellState extends State<HomeShell> {
     // Re-fetch when opening Home so its stats reflect sets just logged on the
     // Workout tab, even if the live refresh was missed.
     if (i == 0) _reload();
+  }
+
+  /// The Movara assistant, opened from the floating button.
+  void _openChat() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (context) {
+        final c = context.movara;
+        return Scaffold(
+          backgroundColor: c.bg,
+          appBar: AppBar(
+            backgroundColor: c.surface,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            iconTheme: IconThemeData(color: c.textPrimary),
+            title: Text('Movara Assistant',
+                style: AppTheme.display(
+                    color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
+          ),
+          body: FeedTab(api: _api),
+        );
+      },
+    ));
   }
 
   /// Account now opens from the header avatar rather than a bottom tab.
@@ -141,12 +167,13 @@ class _HomeShellState extends State<HomeShell> {
                 ),
                 RunningTab(store: _runs),
                 RemindersTab(scheduler: _reminders),
-                FeedTab(api: _api),
+                LeaderboardTab(api: _api),
               ],
             ),
           ),
         ],
       ),
+      floatingActionButton: _ChatFab(onTap: _openChat),
       bottomNavigationBar: _TabBar(
         index: _index,
         onChanged: _onTab,
@@ -230,6 +257,39 @@ class _TabBar extends StatelessWidget {
               ),
             );
           }),
+        ),
+      ),
+    );
+  }
+}
+
+/// Floating button that opens the Movara assistant, sitting above the tab bar.
+class _ChatFab extends StatelessWidget {
+  const _ChatFab({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+    return Padding(
+      // Lift it clear of the bottom tab bar.
+      padding: const EdgeInsets.only(bottom: 64),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 54,
+          height: 54,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: c.accent,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                  color: c.accentGlow, blurRadius: 18, offset: const Offset(0, 4)),
+            ],
+          ),
+          child: const Icon(Icons.auto_awesome, color: Colors.white, size: 24),
         ),
       ),
     );

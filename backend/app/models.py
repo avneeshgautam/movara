@@ -71,3 +71,24 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+
+
+class ProfileRequest(BaseModel):
+    """Client upserts its own name/photo so it can appear on the board."""
+
+    displayName: str
+    photoUrl: str | None = None
+
+    @field_validator("displayName")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        return _require_non_blank(v)
+
+
+class LeaderboardEntry(BaseModel):
+    userId: str
+    displayName: str
+    photoUrl: str | None = None
+    setsThisWeek: int
+    rank: int
+    isMe: bool

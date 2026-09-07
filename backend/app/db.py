@@ -86,6 +86,20 @@ class WorkoutEntry(Base):
     )
 
 
+class Profile(Base):
+    """Public-ish identity for the leaderboard: a name and photo per user.
+
+    Upserted by the client on sign-in. Only what's needed to show someone on a
+    board -- no private workout detail lives here.
+    """
+
+    __tablename__ = "profiles"
+
+    user_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    photo_url: Mapped[str | None] = mapped_column(String(500))
+
+
 SEED_EXERCISES = [
     ("Push-ups", "Chest"),
     ("Squats", "Legs"),

@@ -297,6 +297,10 @@ class _ExerciseCardState extends State<_ExerciseCard> {
     }
   }
 
+  void _changeReps(int i, int delta) {
+    setState(() => _sets[i].reps = (_sets[i].reps + delta).clamp(1, 999).toInt());
+  }
+
   void _changeWeight(int i, double delta) {
     setState(() {
       final w = (_sets[i].weight + delta).clamp(0, 999).toDouble();
@@ -589,11 +593,12 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               ),
             ),
           ),
-          Text('Reps ', style: TextStyle(color: c.textMuted, fontSize: 12)),
+          _roundBtn(context, '−', () => _changeReps(i, -1), c.textSecondary),
+          const SizedBox(width: 6),
           GestureDetector(
             onTap: () => _editReps(i),
             child: Container(
-              constraints: const BoxConstraints(minWidth: 30),
+              constraints: const BoxConstraints(minWidth: 34),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               alignment: Alignment.center,
               decoration: BoxDecoration(
@@ -611,6 +616,8 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               ),
             ),
           ),
+          const SizedBox(width: 6),
+          _roundBtn(context, '+', () => _changeReps(i, 1), c.accent),
           const Spacer(),
           // Weight control.
           _roundBtn(context, '−', () => _changeWeight(i, -0.5), c.textSecondary),
@@ -618,7 +625,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
           GestureDetector(
             onTap: () => _editWeight(i),
             child: Container(
-              width: 54,
+              width: 50,
               padding: const EdgeInsets.symmetric(vertical: 3),
               alignment: Alignment.center,
               decoration: BoxDecoration(

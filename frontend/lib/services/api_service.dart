@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/chat_message.dart';
 import '../models/exercise.dart';
+import '../models/leaderboard_entry.dart';
 import '../models/workout_entry.dart';
 import 'api_config.dart';
 
@@ -49,6 +50,30 @@ class ApiService {
     _checkOk(response);
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return (data['reply'] as String?)?.trim() ?? '';
+  }
+
+  /// Registers (or updates) the signed-in user's name and photo so they can
+  /// appear on the leaderboard. Best-effort: failures are swallowed.
+  Future<void> upsertProfile(String displayName, {String? photoUrl}) async {
+    try {
+      await _client.put(
+        _uri('/profile'),
+        headers: await _headers(json: true),
+        body: jsonEncode({'displayName': displayName, 'photoUrl': photoUrl}),
+      );
+    } catch (_) {
+      // Not fatal -- the board just won't show this user until it succeeds.
+    }
+  }
+
+  Future<List<LeaderboardEntry>> fetchLeaderboard() async {
+    final response =
+        await _client.get(_uri('/leaderboard'), headers: await _headers());
+    _checkOk(response);
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list
+        .map((e) => LeaderboardEntry.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<Exercise>> fetchExercises() async {
