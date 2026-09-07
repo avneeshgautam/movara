@@ -18,6 +18,7 @@ class RouteMap extends StatelessWidget {
     this.interactive = true,
     this.controller,
     this.followLive = false,
+    this.lineColor,
   });
 
   final List<RunPoint> route;
@@ -27,6 +28,10 @@ class RouteMap extends StatelessWidget {
   final bool interactive;
   final MapController? controller;
   final bool followLive;
+
+  /// Overrides the polyline colour (the shared cards use blue); defaults to
+  /// the app accent for the live/history map.
+  final Color? lineColor;
 
   static const _fallbackCentre = LatLng(20.5937, 78.9629); // India
 
@@ -77,7 +82,7 @@ class RouteMap extends StatelessWidget {
         if (points.length > 1)
           PolylineLayer(
             polylines: [
-              Polyline(points: points, strokeWidth: 5, color: c.accent),
+              Polyline(points: points, strokeWidth: 5, color: lineColor ?? c.accent),
             ],
           ),
         MarkerLayer(

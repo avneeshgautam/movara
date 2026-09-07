@@ -1303,7 +1303,7 @@ class _OverlayPreviewState extends State<_OverlayPreview> {
                   run: widget.run,
                   boundaryKey: _cardKey,
                   photo: _photo,
-                  accent: c.accent,
+                  accent: c.blue,
                 ),
               ),
             ),

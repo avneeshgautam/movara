@@ -39,7 +39,7 @@ class ShareCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  RouteMap(route: run.route, interactive: false),
+                  RouteMap(route: run.route, interactive: false, lineColor: c.blue),
                   // Keeps the wordmark legible over pale map tiles.
                   Positioned(
                     top: 0,
