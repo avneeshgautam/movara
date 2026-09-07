@@ -4,6 +4,8 @@ import '../models/workout_entry.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
+import '../services/workout_timer.dart';
+import '../widgets/workout_timer_bar.dart';
 import 'workout_history.dart';
 import 'workout_session.dart';
 
@@ -30,6 +32,19 @@ class WorkoutTab extends StatefulWidget {
 
 class _WorkoutTabState extends State<WorkoutTab> {
   bool _showHistory = false;
+  final _timer = WorkoutTimer();
+
+  @override
+  void initState() {
+    super.initState();
+    _timer.load();
+  }
+
+  @override
+  void dispose() {
+    _timer.dispose();
+    super.dispose();
+  }
 
   Future<String?> _logSet(String exerciseName, int reps, double weightKg) async {
     try {
@@ -79,6 +94,7 @@ class _WorkoutTabState extends State<WorkoutTab> {
                         setState(() => _showHistory = history),
                   ),
                 ),
+                if (!_showHistory) WorkoutTimerBar(stopwatch: _timer),
                 Expanded(
                   child: _showHistory
                       ? WorkoutHistory(entries: entries)
