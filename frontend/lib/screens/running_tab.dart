@@ -1176,16 +1176,61 @@ class _OverlayPreviewState extends State<_OverlayPreview> {
   bool _busy = false;
   String? _error;
 
-  Future<void> _pickPhoto() async {
+  Future<void> _pickPhoto(ImageSource source) async {
     try {
-      final picked = await ImagePicker()
-          .pickImage(source: ImageSource.gallery, maxWidth: 1600);
+      final picked =
+          await ImagePicker().pickImage(source: source, maxWidth: 1600);
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
       if (mounted) setState(() => _photo = bytes);
     } catch (_) {
-      if (mounted) setState(() => _error = 'Could not open that photo.');
+      if (mounted) {
+        setState(() => _error = source == ImageSource.camera
+            ? 'Could not open the camera. Allow camera access in Settings.'
+            : 'Could not open that photo.');
+      }
     }
+  }
+
+  /// Lets the user take a new photo or pick an existing one.
+  Future<void> _choosePhotoSource() async {
+    final c = context.movara;
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: c.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: c.border, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Icon(Icons.camera_alt_outlined, color: c.accent),
+              title: Text('Take photo',
+                  style: AppTheme.display(color: c.textPrimary, fontSize: 15)),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: Icon(Icons.photo_library_outlined, color: c.accent),
+              title: Text('Choose from gallery',
+                  style: AppTheme.display(color: c.textPrimary, fontSize: 15)),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
+    if (source != null) await _pickPhoto(source);
   }
 
   String get _fileName =>
@@ -1279,7 +1324,7 @@ class _OverlayPreviewState extends State<_OverlayPreview> {
                         child: _pill(
                           icon: Icons.image_outlined,
                           label: _photo == null ? 'Add photo' : 'Change photo',
-                          onTap: _busy ? null : _pickPhoto,
+                          onTap: _busy ? null : _choosePhotoSource,
                         ),
                       ),
                       if (_photo != null) ...[

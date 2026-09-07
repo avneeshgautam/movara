@@ -37,6 +37,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Movara uses the camera so you can put a photo behind your run overlay.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Movara keeps tracking your route while the app is in the background so your run is recorded with the screen off.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

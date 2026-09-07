@@ -46,29 +46,56 @@ class OverlayCard extends StatelessWidget {
               Container(color: Colors.black.withValues(alpha: 0.28)),
             ],
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
+              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 22),
               child: Column(
                 children: [
-                  _stat('DISTANCE', '${run.distanceKm.toStringAsFixed(2)} km'),
-                  const SizedBox(height: 18),
-                  _stat('PACE', '${formatPace(run.paceSecondsPerKm)} /km'),
-                  const SizedBox(height: 18),
-                  _stat('TIME', formatDuration(run.elapsed)),
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: run.route.length > 1
-                        ? RoutePath(route: run.route, color: accent, strokeWidth: 6)
-                        : const SizedBox.shrink(),
-                  ),
-                  const SizedBox(height: 8),
+                  // 1. Brand at the top.
                   Text(
                     'MOVARA',
                     style: AppTheme.display(
                       color: Colors.white,
-                      fontSize: 20,
+                      fontSize: 24,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: 3,
+                      letterSpacing: 4,
                     ).copyWith(shadows: _shadows),
+                  ),
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    width: 44,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  // 2. The route in the middle.
+                  Expanded(
+                    child: run.route.length > 1
+                        ? RoutePath(route: run.route, color: accent, strokeWidth: 6)
+                        : Center(
+                            child: Text(
+                              'No route recorded',
+                              style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                  fontSize: 13,
+                                  shadows: _shadows),
+                            ),
+                          ),
+                  ),
+                  // 3. The details in a row at the bottom.
+                  Row(
+                    children: [
+                      Expanded(
+                          child: _stat(
+                              'DISTANCE', '${run.distanceKm.toStringAsFixed(2)} km')),
+                      _divider(),
+                      Expanded(
+                          child: _stat(
+                              'PACE', '${formatPace(run.paceSecondsPerKm)} /km')),
+                      _divider(),
+                      Expanded(
+                          child: _stat('TIME', formatDuration(run.elapsed))),
+                    ],
                   ),
                 ],
               ),
@@ -84,27 +111,38 @@ class OverlayCard extends StatelessWidget {
       children: [
         Text(
           label,
+          textAlign: TextAlign.center,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 13,
+            fontSize: 9,
             fontWeight: FontWeight.w600,
-            letterSpacing: 1.5,
+            letterSpacing: 1.2,
             shadows: _shadows,
           ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          textAlign: TextAlign.center,
-          style: AppTheme.display(
-            color: Colors.white,
-            fontSize: 34,
-            fontWeight: FontWeight.w800,
-          ).copyWith(shadows: _shadows),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            textAlign: TextAlign.center,
+            style: AppTheme.display(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ).copyWith(shadows: _shadows),
+          ),
         ),
       ],
     );
   }
+
+  Widget _divider() => Container(
+        width: 1,
+        height: 30,
+        margin: const EdgeInsets.symmetric(horizontal: 6),
+        color: Colors.white.withValues(alpha: 0.3),
+      );
 
   static const _shadows = [
     Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 1)),
