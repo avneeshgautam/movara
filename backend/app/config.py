@@ -41,7 +41,7 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CHAT_MODEL = os.getenv("CHAT_MODEL", "claude-haiku-4-5-20251001")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
 CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "").strip().lower()
 CHAT_MAX_TOKENS = int(os.getenv("CHAT_MAX_TOKENS", "600"))
