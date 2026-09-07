@@ -147,9 +147,24 @@ def get_session():
         yield session
 
 
+def _migrate(session: Session) -> None:
+    """Lightweight, idempotent column adds. create_all() only makes missing
+    tables, not new columns on tables that already exist, so a model that
+    gains a column needs this to reach a database created by an older build."""
+    from sqlalchemy import text
+
+    session.execute(
+        text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username VARCHAR(40)")
+    )
+    session.commit()
+
+
 def init() -> None:
-    """Create tables and seed starter exercises (idempotent)."""
+    """Create tables, run tiny migrations, and seed starter exercises."""
     Base.metadata.create_all(engine)
+
+    with SessionLocal() as session:
+        _migrate(session)
 
     with SessionLocal() as session:
         existing = session.scalar(select(func.count()).select_from(Exercise))
