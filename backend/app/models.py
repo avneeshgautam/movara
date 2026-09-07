@@ -74,15 +74,27 @@ class ChatResponse(BaseModel):
 
 
 class ProfileRequest(BaseModel):
-    """Client upserts its own name/photo so it can appear on the board."""
+    """Client upserts its own name/photo (and optional public username)."""
 
     displayName: str
     photoUrl: str | None = None
+    username: str | None = None
 
     @field_validator("displayName")
     @classmethod
     def _name(cls, v: str) -> str:
         return _require_non_blank(v)
+
+    @field_validator("username")
+    @classmethod
+    def _username(cls, v: str | None) -> str | None:
+        # None means "not provided"; an empty string means "clear it".
+        return None if v is None else v.strip()
+
+
+class MyProfile(BaseModel):
+    displayName: str
+    username: str | None = None
 
 
 class RunUpload(BaseModel):

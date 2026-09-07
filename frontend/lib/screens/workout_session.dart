@@ -79,7 +79,7 @@ class _WorkoutSessionState extends State<WorkoutSession> {
         children: [
           // Page title.
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

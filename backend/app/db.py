@@ -126,6 +126,9 @@ class Profile(Base):
     user_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     photo_url: Mapped[str | None] = mapped_column(String(500))
+    # Public handle chosen by the user; shown to others instead of the real
+    # name. Null until they set one.
+    username: Mapped[str | None] = mapped_column(String(40))
 
 
 SEED_EXERCISES = [

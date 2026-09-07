@@ -99,16 +99,33 @@ class ApiService {
 
   /// Registers (or updates) the signed-in user's name and photo so they can
   /// appear on the leaderboard. Best-effort: failures are swallowed.
-  Future<void> upsertProfile(String displayName, {String? photoUrl}) async {
+  Future<void> upsertProfile(String displayName,
+      {String? photoUrl, String? username}) async {
     try {
       await _client.put(
         _uri('/profile'),
         headers: await _headers(json: true),
-        body: jsonEncode({'displayName': displayName, 'photoUrl': photoUrl}),
+        body: jsonEncode({
+          'displayName': displayName,
+          'photoUrl': photoUrl,
+          if (username != null) 'username': username,
+        }),
       );
     } catch (_) {
       // Not fatal -- the board just won't show this user until it succeeds.
     }
+  }
+
+  /// The signed-in user's own profile (real name + chosen public username).
+  Future<({String displayName, String? username})> fetchMyProfile() async {
+    final response =
+        await _client.get(_uri('/profile/me'), headers: await _headers());
+    _checkOk(response);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return (
+      displayName: (data['displayName'] as String?) ?? '',
+      username: data['username'] as String?,
+    );
   }
 
   /// Syncs one recorded run to the backend so it scores on the leaderboard.

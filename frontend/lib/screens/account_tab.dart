@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../services/api_service.dart';
 import 'package:intl/intl.dart';
 
 import '../models/workout_entry.dart';
@@ -13,6 +15,7 @@ import '../theme/movara_colors.dart';
 class AccountTab extends StatefulWidget {
   const AccountTab({
     super.key,
+    required this.api,
     required this.entriesFuture,
     this.displayName = 'Athlete',
     this.email,
@@ -20,6 +23,7 @@ class AccountTab extends StatefulWidget {
     this.onSignOut,
   });
 
+  final ApiService api;
   final Future<List<WorkoutEntry>> entriesFuture;
   final String displayName;
   final String? email;
@@ -33,6 +37,57 @@ class AccountTab extends StatefulWidget {
 class _AccountTabState extends State<AccountTab> {
   String get _name => widget.displayName;
   String get _handle => widget.email ?? 'Signed in';
+
+  final _usernameController = TextEditingController();
+  bool _usernameLoaded = false;
+  bool _savingUsername = false;
+  String? _usernameMsg;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsername();
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUsername() async {
+    try {
+      final me = await widget.api.fetchMyProfile();
+      if (!mounted) return;
+      setState(() {
+        _usernameController.text = me.username ?? '';
+        _usernameLoaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _usernameLoaded = true);
+    }
+  }
+
+  Future<void> _saveUsername() async {
+    final value = _usernameController.text.trim();
+    setState(() {
+      _savingUsername = true;
+      _usernameMsg = null;
+    });
+    try {
+      await widget.api.upsertProfile(widget.displayName,
+          photoUrl: widget.photoUrl, username: value);
+      if (mounted) {
+        setState(() => _usernameMsg = value.isEmpty
+            ? 'Cleared — others will see your first name.'
+            : 'Saved. Others see “$value” on the leaderboard.');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _usernameMsg = "Couldn't save. Try again.");
+    } finally {
+      if (mounted) setState(() => _savingUsername = false);
+    }
+  }
 
   // Local-only for now; nothing persists these yet.
   final Map<String, double> _body = {
@@ -83,6 +138,9 @@ class _AccountTabState extends State<AccountTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    _title('Leaderboard Name'),
+                    _leaderboardName(context),
+                    const SizedBox(height: 22),
                     _title('Body Stats'),
                     _bodyStats(context),
                     const SizedBox(height: 22),
@@ -110,6 +168,85 @@ class _AccountTabState extends State<AccountTab> {
           ),
         );
       },
+    );
+  }
+
+  Widget _leaderboardName(BuildContext context) {
+    final c = context.movara;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'The name others see on the leaderboard. Leave it blank to show '
+            'just your first name.',
+            style: TextStyle(color: c.textSecondary, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _usernameController,
+                  enabled: _usernameLoaded,
+                  maxLength: 40,
+                  style: TextStyle(color: c.textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. IronMike',
+                    hintStyle: TextStyle(color: c.textMuted),
+                    counterText: '',
+                    isDense: true,
+                    filled: true,
+                    fillColor: c.surface2,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: c.border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: c.accent),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: c.border),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              GestureDetector(
+                onTap: _savingUsername ? null : _saveUsername,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+                  decoration: BoxDecoration(
+                    color: c.accent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(_savingUsername ? '…' : 'Save',
+                      style: AppTheme.display(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800)),
+                ),
+              ),
+            ],
+          ),
+          if (_usernameMsg != null) ...[
+            const SizedBox(height: 8),
+            Text(_usernameMsg!,
+                style: TextStyle(color: c.textMuted, fontSize: 11)),
+          ],
+        ],
+      ),
     );
   }
 

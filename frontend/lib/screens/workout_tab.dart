@@ -66,6 +66,7 @@ class _WorkoutTabState extends State<WorkoutTab> {
         return Container(
           color: c.bg,
           child: SafeArea(
+            top: false,
             bottom: false,
             child: Column(
               children: [

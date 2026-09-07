@@ -119,6 +119,7 @@ void main() {
   group('AccountTab', () {
     testWidgets('renders the profile sections', (tester) async {
       await tester.pumpWidget(wrap(AccountTab(
+        api: ApiService(),
         entriesFuture: Future.value(const <WorkoutEntry>[]),
       )));
       await tester.pumpAndSettle();
@@ -134,6 +135,7 @@ void main() {
         (tester) async {
       final today = DateTime.now();
       await tester.pumpWidget(wrap(AccountTab(
+        api: ApiService(),
         entriesFuture: Future.value([
           WorkoutEntry(
             id: 'a',
@@ -165,6 +167,7 @@ void main() {
     testWidgets('shows an empty state when there are no records',
         (tester) async {
       await tester.pumpWidget(wrap(AccountTab(
+        api: ApiService(),
         entriesFuture: Future.value(const <WorkoutEntry>[]),
       )));
       await tester.pumpAndSettle();

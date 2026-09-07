@@ -131,34 +131,6 @@ class _HomeShellState extends State<HomeShell> {
     ));
   }
 
-  /// Account now opens from the header avatar rather than a bottom tab.
-  void _openAccount() {
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (context) {
-        final c = context.movara;
-        return Scaffold(
-          backgroundColor: c.bg,
-          appBar: AppBar(
-            backgroundColor: c.surface,
-            surfaceTintColor: Colors.transparent,
-            elevation: 0,
-            iconTheme: IconThemeData(color: c.textPrimary),
-            title: Text('Account',
-                style: AppTheme.display(
-                    color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
-          ),
-          body: AccountTab(
-            entriesFuture: _entriesFuture,
-            displayName: _displayName,
-            email: widget.auth.currentUser?.email,
-            photoUrl: widget.auth.currentUser?.photoURL,
-            onSignOut: widget.auth.signOut,
-          ),
-        );
-      },
-    ));
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = context.movara;
@@ -171,8 +143,6 @@ class _HomeShellState extends State<HomeShell> {
             username: _displayName,
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
-            photoUrl: widget.auth.currentUser?.photoURL,
-            onAvatarTap: _openAccount,
             action: _TimerButton(timer: _workoutTimer, onTap: _openTimer),
           ),
           Expanded(
@@ -193,6 +163,7 @@ class _HomeShellState extends State<HomeShell> {
                 RemindersTab(scheduler: _reminders),
                 LeaderboardTab(api: _api),
                 AccountTab(
+                  api: _api,
                   entriesFuture: _entriesFuture,
                   displayName: _displayName,
                   email: widget.auth.currentUser?.email,

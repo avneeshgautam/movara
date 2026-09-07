@@ -104,3 +104,45 @@ class TestLeaderboard:
 
     def test_leaderboard_requires_auth(self):
         assert client.get("/api/leaderboard").status_code == 401
+
+
+class TestUsernamePrivacy:
+    def test_others_see_username_not_real_name(self, local_signing_key):
+        # Bob sets a username; Alice should see that, not "Bob Smith".
+        client.put(
+            "/api/profile",
+            json={"displayName": "Bob Smith", "username": "IronBob"},
+            headers=headers_for(local_signing_key, "bob"),
+        )
+        set_profile(local_signing_key, "alice", "Alice Jones")
+
+        board = client.get(
+            "/api/leaderboard", headers=headers_for(local_signing_key, "alice")
+        ).json()
+        names = {e["userId"]: e["displayName"] for e in board}
+        assert names["bob"] == "IronBob"
+        # Alice sees her own real name on her row.
+        assert names["alice"] == "Alice Jones"
+
+    def test_without_username_others_see_first_name_only(self, local_signing_key):
+        set_profile(local_signing_key, "bob", "Bob Smith")
+        set_profile(local_signing_key, "alice", "Alice Jones")
+
+        board = client.get(
+            "/api/leaderboard", headers=headers_for(local_signing_key, "alice")
+        ).json()
+        names = {e["userId"]: e["displayName"] for e in board}
+        assert names["bob"] == "Bob"  # first name only, surname hidden
+        assert names["alice"] == "Alice Jones"  # own row, full name
+
+    def test_profile_me_returns_username(self, local_signing_key):
+        client.put(
+            "/api/profile",
+            json={"displayName": "Bob Smith", "username": "IronBob"},
+            headers=headers_for(local_signing_key, "bob"),
+        )
+        me = client.get(
+            "/api/profile/me", headers=headers_for(local_signing_key, "bob")
+        ).json()
+        assert me["displayName"] == "Bob Smith"
+        assert me["username"] == "IronBob"

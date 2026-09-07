@@ -89,8 +89,6 @@ void main() {
 
         expect(find.text('MOVARA'), findsOneWidget);
         expect(find.text(isDark ? 'Dark' : 'Light'), findsOneWidget);
-        // Avatar initial.
-        expect(find.text('A'), findsOneWidget);
       }
     });
 

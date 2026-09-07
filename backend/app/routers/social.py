@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from .. import db
 from ..auth import current_uid
-from ..models import LeaderboardEntry, ProfileRequest
+from ..models import LeaderboardEntry, MyProfile, ProfileRequest
 
 # Points: reward a set and a kilometre. Tuned so a typical workout and a short
 # run land in a similar range.
@@ -40,7 +40,31 @@ def upsert_profile(
         session.add(profile)
     profile.display_name = body.displayName.strip()[:120]
     profile.photo_url = body.photoUrl
+    if body.username is not None:
+        profile.username = body.username[:40] or None
     session.commit()
+
+
+@router.get("/api/profile/me", response_model=MyProfile)
+def my_profile(
+    uid: str = Depends(current_uid),
+    session: Session = Depends(db.get_session),
+) -> MyProfile:
+    profile = session.get(db.Profile, uid)
+    if profile is None:
+        return MyProfile(displayName="", username=None)
+    return MyProfile(displayName=profile.display_name, username=profile.username)
+
+
+def _public_name(profile: "db.Profile", uid: str) -> str:
+    """What to show for this profile: the caller sees their own real name;
+    everyone else sees the chosen username, or just a first name as a
+    privacy-preserving fallback."""
+    if profile.user_id == uid:
+        return profile.display_name
+    if profile.username:
+        return profile.username
+    return profile.display_name.split(" ")[0] if profile.display_name else "Athlete"
 
 
 @router.get("/api/leaderboard", response_model=list[LeaderboardEntry])
@@ -82,7 +106,7 @@ def leaderboard(
         sets = int(sets_by_user.get(p.user_id, 0))
         km = float(metres_by_user.get(p.user_id, 0.0)) / 1000
         points = round(sets * _POINTS_PER_SET + km * _POINTS_PER_KM)
-        rows.append((p.user_id, p.display_name, p.photo_url, sets, km, points))
+        rows.append((p.user_id, _public_name(p, uid), p.photo_url, sets, km, points))
 
     # Highest points first; ties broken by name so the order is stable.
     rows.sort(key=lambda r: (-r[5], r[1].lower()))
