@@ -34,9 +34,30 @@ FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "")
 # in git. Without it the /api/chat endpoint returns 503 so the app can say the
 # assistant isn't set up yet. The model is configurable so it can be changed
 # without a code change.
+# Two providers are supported. Gemini has a free tier (Google AI Studio);
+# Anthropic is paid. Set one key. CHAT_PROVIDER can force a choice; otherwise
+# whichever key is present wins, preferring Gemini.
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CHAT_MODEL = os.getenv("CHAT_MODEL", "claude-haiku-4-5-20251001")
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "").strip().lower()
 CHAT_MAX_TOKENS = int(os.getenv("CHAT_MAX_TOKENS", "600"))
+
+
+def chat_provider() -> str | None:
+    """Which model provider to use, or None when no key is set."""
+    if CHAT_PROVIDER == "gemini":
+        return "gemini" if GEMINI_API_KEY else None
+    if CHAT_PROVIDER == "anthropic":
+        return "anthropic" if ANTHROPIC_API_KEY else None
+    if GEMINI_API_KEY:
+        return "gemini"
+    if ANTHROPIC_API_KEY:
+        return "anthropic"
+    return None
 
 
 def cors_settings() -> dict:
