@@ -15,6 +15,7 @@ import 'package:movara_app/screens/running_tab.dart';
 import 'package:movara_app/theme/app_theme.dart';
 import 'package:movara_app/widgets/route_map.dart';
 import 'package:movara_app/widgets/share_card.dart';
+import 'package:movara_app/widgets/overlay_card.dart';
 
 import 'test_setup.dart';
 
@@ -587,6 +588,40 @@ void main() {
       expect(bytes!.length, greaterThan(1000));
 
       final dump = Platform.environment['MOVARA_SHARE_PNG'];
+      if (dump != null) File(dump).writeAsBytesSync(bytes!);
+    });
+  });
+
+  group('OverlayCard', () {
+    setUp(disableGoogleFontsNetwork);
+
+    testWidgets('renders the figures and rasterises to a transparent PNG',
+        (tester) async {
+      final key = GlobalKey();
+      final run = _run(
+          id: 'a', at: DateTime(2026, 9, 5, 7), seconds: 787, metres: 2000);
+
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.light(),
+        home: Center(child: OverlayCard(run: run, boundaryKey: key)),
+      ));
+      await tester.pump();
+
+      expect(find.text('DISTANCE'), findsOneWidget);
+      expect(find.text('2.00 km'), findsOneWidget);
+      expect(find.text('MOVARA'), findsOneWidget);
+
+      Uint8List? bytes;
+      await tester.runAsync(() async {
+        bytes = await captureOverlay(key, pixelRatio: 2);
+      });
+      expect(bytes, isNotNull);
+      expect(bytes!.sublist(0, 4), [0x89, 0x50, 0x4E, 0x47]);
+
+      // The PNG must carry an alpha channel (colour type 6) for transparency.
+      expect(bytes![25], 6);
+
+      final dump = Platform.environment['MOVARA_OVERLAY_PNG'];
       if (dump != null) File(dump).writeAsBytesSync(bytes!);
     });
   });

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../models/run_record.dart';
@@ -9,6 +10,7 @@ import '../services/run_tracker.dart';
 import '../services/share_image.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
+import '../widgets/overlay_card.dart';
 import '../widgets/route_map.dart';
 import '../widgets/share_card.dart';
 
@@ -770,6 +772,14 @@ class _SummaryState extends State<_Summary> {
     );
   }
 
+  void _overlay() {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.85),
+      builder: (_) => _OverlayPreview(run: widget.run),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.movara;
@@ -847,6 +857,8 @@ class _SummaryState extends State<_Summary> {
             _primaryButton(context, 'Save Activity', widget.onSave),
             const SizedBox(height: 10),
             _secondaryButton(context, 'Share as image', _share),
+            const SizedBox(height: 10),
+            _secondaryButton(context, 'Story overlay (transparent)', _overlay),
             const SizedBox(height: 6),
             Center(
               child: GestureDetector(
@@ -1144,4 +1156,245 @@ class _SharePreviewState extends State<_SharePreview> {
       ),
     );
   }
+}
+
+/// Preview + save for the transparent Strava-style overlay. Lets the user drop
+/// a photo behind the stats, then saves the result (transparent PNG when no
+/// photo) to their library.
+class _OverlayPreview extends StatefulWidget {
+  const _OverlayPreview({required this.run});
+
+  final RunRecord run;
+
+  @override
+  State<_OverlayPreview> createState() => _OverlayPreviewState();
+}
+
+class _OverlayPreviewState extends State<_OverlayPreview> {
+  final _cardKey = GlobalKey();
+  Uint8List? _photo;
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _pickPhoto() async {
+    try {
+      final picked = await ImagePicker()
+          .pickImage(source: ImageSource.gallery, maxWidth: 1600);
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (mounted) setState(() => _photo = bytes);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not open that photo.');
+    }
+  }
+
+  String get _fileName =>
+      'movara-overlay-${DateFormat('yyyy-MM-dd').format(widget.run.startedAt)}.png';
+
+  Future<void> _save() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      // Let the card (and any photo) settle before rasterising.
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      final bytes = await captureOverlay(_cardKey);
+      if (bytes == null) throw StateError('nothing to capture');
+
+      final ok = await const ShareImage().saveToPhotos(bytes, _fileName);
+      if (!mounted) return;
+      if (ok) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Saved to Photos')));
+      } else {
+        setState(() =>
+            _error = 'Could not save to Photos. Allow photo access in Settings.');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not create the image.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _share() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      final bytes = await captureOverlay(_cardKey);
+      if (bytes == null) throw StateError('nothing to capture');
+      await const ShareImage().save(bytes, _fileName);
+      if (mounted) Navigator.of(context).pop();
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not create the image.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(16),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // A checkerboard sits behind the card so the transparent areas are
+            // obvious in the preview (it is not part of the saved image).
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: CustomPaint(
+                painter: _photo == null ? _CheckerPainter() : null,
+                child: OverlayCard(
+                  run: widget.run,
+                  boundaryKey: _cardKey,
+                  photo: _photo,
+                  accent: c.accent,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (_error != null) ...[
+              Text(_error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 12)),
+              const SizedBox(height: 10),
+            ],
+            SizedBox(
+              width: OverlayCard.width,
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _pill(
+                          icon: Icons.image_outlined,
+                          label: _photo == null ? 'Add photo' : 'Change photo',
+                          onTap: _busy ? null : _pickPhoto,
+                        ),
+                      ),
+                      if (_photo != null) ...[
+                        const SizedBox(width: 10),
+                        _pill(
+                          icon: Icons.close,
+                          label: 'Remove',
+                          onTap: _busy ? null : () => setState(() => _photo = null),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: _busy ? null : _save,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: c.accent,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.photo_library_outlined,
+                              size: 17, color: Colors.white),
+                          const SizedBox(width: 8),
+                          Text(_busy ? 'Saving…' : 'Save to Photos',
+                              style: AppTheme.display(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _pill(
+                          label: 'Close',
+                          onTap: () => Navigator.of(context).pop(),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _pill(
+                          icon: Icons.ios_share,
+                          label: 'Share',
+                          onTap: _busy ? null : _share,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pill({IconData? icon, required String label, VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: onTap == null ? 0.5 : 1,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 16, color: Colors.white),
+                const SizedBox(width: 6),
+              ],
+              Text(label,
+                  style: AppTheme.display(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A grey checkerboard, the usual "this is transparent" backdrop. Preview only.
+class _CheckerPainter extends CustomPainter {
+  static const _cell = 14.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final light = Paint()..color = const Color(0xFF3A3A3A);
+    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF2A2A2A));
+    for (var y = 0.0; y < size.height; y += _cell) {
+      for (var x = 0.0; x < size.width; x += _cell) {
+        if (((x ~/ _cell) + (y ~/ _cell)) % 2 == 0) {
+          canvas.drawRect(Rect.fromLTWH(x, y, _cell, _cell), light);
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

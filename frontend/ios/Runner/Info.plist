@@ -43,6 +43,8 @@
 	<string>Movara uses your location to map the route of your run.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Movara saves your run cards to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Movara lets you place a photo behind your run overlay.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
