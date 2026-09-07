@@ -4,6 +4,7 @@ import '../models/workout_entry.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/reminder_scheduler.dart';
+import '../services/goal_store.dart';
 import '../services/run_store.dart';
 import '../models/run_record.dart' show formatDuration;
 import '../services/workout_timer.dart';
@@ -42,6 +43,7 @@ class _HomeShellState extends State<HomeShell> {
       ApiService(tokenProvider: widget.auth.idToken);
   final _reminders = ReminderScheduler();
   final _workoutTimer = WorkoutTimer();
+  final _goals = GoalStore();
   late final RunStore _runs = RunStore(uploader: _api.uploadRun);
   int _index = 0;
 
@@ -56,6 +58,7 @@ class _HomeShellState extends State<HomeShell> {
     _reminders.load();
     _runs.load();
     _workoutTimer.load();
+    _goals.load();
     // Register name/photo so this user shows on the leaderboard.
     _api.upsertProfile(_displayName,
         photoUrl: widget.auth.currentUser?.photoURL);
@@ -66,6 +69,7 @@ class _HomeShellState extends State<HomeShell> {
     _reminders.dispose();
     _runs.dispose();
     _workoutTimer.dispose();
+    _goals.dispose();
     _api.dispose();
     super.dispose();
   }
@@ -154,6 +158,7 @@ class _HomeShellState extends State<HomeShell> {
                 HomeTab(
                   entriesFuture: _entriesFuture,
                   runStore: _runs,
+                  goalStore: _goals,
                   onReload: _reload,
                 ),
                 WorkoutTab(

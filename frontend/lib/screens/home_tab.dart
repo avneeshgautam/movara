@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/run_record.dart';
 import '../models/workout_entry.dart';
+import '../services/goal_store.dart';
 import '../services/run_store.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
@@ -18,11 +20,13 @@ class HomeTab extends StatelessWidget {
     super.key,
     required this.entriesFuture,
     required this.runStore,
+    required this.goalStore,
     required this.onReload,
   });
 
   final Future<List<WorkoutEntry>> entriesFuture;
   final RunStore runStore;
+  final GoalStore goalStore;
   final Future<void> Function() onReload;
 
   @override
@@ -34,7 +38,7 @@ class HomeTab extends StatelessWidget {
       color: c.accent,
       backgroundColor: c.surface,
       child: AnimatedBuilder(
-        animation: runStore,
+        animation: Listenable.merge([runStore, goalStore]),
         builder: (context, _) => FutureBuilder<List<WorkoutEntry>>(
         future: entriesFuture,
         builder: (context, snapshot) {
@@ -53,7 +57,11 @@ class HomeTab extends StatelessWidget {
                 const SizedBox(height: 20),
               ],
 
-              const SectionHeader(title: "Today's Overview", action: 'Edit Goal →'),
+              SectionHeader(
+                title: "Today's Overview",
+                action: 'Edit Goal →',
+                onAction: () => _editGoal(context),
+              ),
               IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -63,11 +71,20 @@ class HomeTab extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // TODO: wire to a real step source; 72% is from the mockup.
-                          const GoalRing(percent: 72, size: 130),
+                          // Real: sets logged this week against the user's goal.
+                          GoalRing(
+                            percent: goalStore.weeklySets <= 0
+                                ? 0
+                                : (stats.totalSetsThisWeek /
+                                        goalStore.weeklySets *
+                                        100)
+                                    .clamp(0, 100)
+                                    .round(),
+                            size: 130,
+                          ),
                           const SizedBox(height: 10),
                           Text(
-                            'Daily Goal',
+                            'Weekly Goal',
                             style: AppTheme.display(
                               color: c.textPrimary,
                               fontSize: 14,
@@ -75,7 +92,7 @@ class HomeTab extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '7,200 / 10,000 steps',
+                            '${stats.totalSetsThisWeek} / ${goalStore.weeklySets} sets',
                             style: TextStyle(color: c.textSecondary, fontSize: 12),
                           ),
                         ],
@@ -133,13 +150,18 @@ class HomeTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
               ],
-              AchievementCard(
-                emoji: '🏅',
-                title: '10,000 Steps',
-                description: 'Daily goal crushed!',
-                date: 'Today',
-                tint: c.accentSoft,
-              ),
+              if (stats.totalSetsThisWeek >= goalStore.weeklySets &&
+                  goalStore.weeklySets > 0) ...[
+                AchievementCard(
+                  emoji: '🎯',
+                  title: 'Weekly Goal Reached',
+                  description:
+                      '${stats.totalSetsThisWeek} of ${goalStore.weeklySets} sets this week',
+                  date: 'This week',
+                  tint: c.accentSoft,
+                ),
+                const SizedBox(height: 10),
+              ],
               if (_runAchievement(context) case final card?) ...[
                 const SizedBox(height: 10),
                 card,
@@ -157,6 +179,14 @@ class HomeTab extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _editGoal(BuildContext context) async {
+    final result = await showDialog<int>(
+      context: context,
+      builder: (_) => _GoalDialog(current: goalStore.weeklySets),
+    );
+    if (result != null) await goalStore.setWeeklySets(result);
   }
 
   /// A real running achievement from recorded runs, or null when none exist
@@ -313,6 +343,105 @@ class WeekStats {
       normalizedByWeekday: normalized,
       streak: streak,
       totalSetsThisWeek: setsPerWeekday.fold<int>(0, (a, b) => a + b),
+    );
+  }
+}
+
+/// Sets the weekly sets goal: a few presets plus a typed value.
+class _GoalDialog extends StatefulWidget {
+  const _GoalDialog({required this.current});
+
+  final int current;
+
+  @override
+  State<_GoalDialog> createState() => _GoalDialogState();
+}
+
+class _GoalDialogState extends State<_GoalDialog> {
+  static const _presets = [20, 30, 40, 60];
+  late final TextEditingController _field =
+      TextEditingController(text: '${widget.current}');
+
+  @override
+  void dispose() {
+    _field.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final n = int.tryParse(_field.text.trim()) ?? widget.current;
+    Navigator.pop(context, n);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+    return AlertDialog(
+      backgroundColor: c.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text('Weekly goal',
+          style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('How many sets do you want to log each week?',
+              style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.4)),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final p in _presets)
+                GestureDetector(
+                  onTap: () => setState(() => _field.text = '$p'),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _field.text == '$p' ? c.accent : c.surface2,
+                      border: Border.all(
+                          color: _field.text == '$p' ? c.accent : c.border),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text('$p',
+                        style: AppTheme.display(
+                            color: _field.text == '$p'
+                                ? Colors.white
+                                : c.textSecondary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _field,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: TextStyle(color: c.textPrimary),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: 'Sets per week',
+              labelStyle: TextStyle(color: c.textMuted),
+              focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: c.accent)),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: c.textMuted))),
+        ElevatedButton(
+          onPressed: _save,
+          style: ElevatedButton.styleFrom(
+              backgroundColor: c.accent, foregroundColor: Colors.white),
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
