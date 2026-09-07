@@ -33,6 +33,7 @@ class _WorkoutTimerBarState extends State<WorkoutTimerBar> {
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           _stopwatchRow(context),
           const SizedBox(height: 12),

@@ -96,10 +96,16 @@ class _HomeShellState extends State<HomeShell> {
   void _openTimer() {
     showDialog<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.55),
-      builder: (_) => Dialog(
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (context) => Dialog(
+        // A compact card near the top, not a full-height centered panel.
+        alignment: Alignment.topCenter,
         backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+        insetPadding: EdgeInsets.only(
+          top: MediaQuery.of(context).padding.top + 12,
+          left: 12,
+          right: 12,
+        ),
         child: WorkoutTimerBar(stopwatch: _workoutTimer),
       ),
     );
