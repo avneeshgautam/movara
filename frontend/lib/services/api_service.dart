@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../models/chat_message.dart';
 import '../models/exercise.dart';
 import '../models/leaderboard_entry.dart';
+import '../models/run_record.dart';
 import '../models/workout_entry.dart';
 import 'api_config.dart';
 
@@ -63,6 +64,25 @@ class ApiService {
       );
     } catch (_) {
       // Not fatal -- the board just won't show this user until it succeeds.
+    }
+  }
+
+  /// Syncs one recorded run to the backend so it scores on the leaderboard.
+  /// Best-effort and idempotent (the server upserts by id).
+  Future<void> uploadRun(RunRecord run) async {
+    try {
+      await _client.post(
+        _uri('/runs'),
+        headers: await _headers(json: true),
+        body: jsonEncode({
+          'id': run.id,
+          'startedAt': run.startedAt.toUtc().toIso8601String(),
+          'elapsedSeconds': run.elapsedSeconds,
+          'distanceMeters': run.distanceMeters,
+        }),
+      );
+    } catch (_) {
+      // Not fatal -- the run stays local and syncs on a later attempt.
     }
   }
 

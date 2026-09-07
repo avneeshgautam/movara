@@ -4,7 +4,7 @@ Field names are deliberately camelCase to match the JSON contract the Flutter
 client already speaks -- they mirror the old Java DTOs one-for-one.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -85,10 +85,21 @@ class ProfileRequest(BaseModel):
         return _require_non_blank(v)
 
 
+class RunUpload(BaseModel):
+    """A run summary synced from the device."""
+
+    id: str
+    startedAt: datetime
+    elapsedSeconds: int
+    distanceMeters: float
+
+
 class LeaderboardEntry(BaseModel):
     userId: str
     displayName: str
     photoUrl: str | None = None
+    points: int
     setsThisWeek: int
+    kmThisWeek: float
     rank: int
     isMe: bool

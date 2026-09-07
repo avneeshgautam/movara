@@ -7,9 +7,19 @@ Pydantic response models, so the API is unchanged.
 
 import logging
 import uuid
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import Date, Float, Index, Integer, String, create_engine, func, select
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Float,
+    Index,
+    Integer,
+    String,
+    create_engine,
+    func,
+    select,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from . import config
@@ -83,6 +93,24 @@ class WorkoutEntry(Base):
     # Every query filters by owner, usually with a date.
     __table_args__ = (
         Index("ix_workout_entries_user_date", "user_id", "performed_at"),
+    )
+
+
+class Run(Base):
+    """A recorded run, synced from the device so it can score on the
+    leaderboard and (later) follow the user across devices. Route points are
+    not stored here -- only what the leaderboard and history need."""
+
+    __tablename__ = "runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    started_at: Mapped["datetime"] = mapped_column(DateTime, nullable=False)
+    elapsed_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    distance_meters: Mapped[float] = mapped_column(Float, nullable=False)
+
+    __table_args__ = (
+        Index("ix_runs_user_started", "user_id", "started_at"),
     )
 
 

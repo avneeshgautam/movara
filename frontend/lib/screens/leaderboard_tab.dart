@@ -56,7 +56,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                         fontSize: 24,
                         fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                Text('Ranked by sets logged since Monday.',
+                Text('Points = 10 per set + 20 per km, this week.',
                     style: TextStyle(color: c.textSecondary, fontSize: 13)),
                 const SizedBox(height: 20),
                 if (snapshot.connectionState == ConnectionState.waiting)
@@ -124,25 +124,36 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              e.isMe ? '${e.displayName} (you)' : e.displayName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTheme.display(
-                color: c.textPrimary,
-                fontSize: 15,
-                fontWeight: e.isMe ? FontWeight.w800 : FontWeight.w600,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  e.isMe ? '${e.displayName} (you)' : e.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.display(
+                    color: c.textPrimary,
+                    fontSize: 15,
+                    fontWeight: e.isMe ? FontWeight.w800 : FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${e.setsThisWeek} sets · ${e.kmThisWeek.toStringAsFixed(1)} km',
+                  style: TextStyle(color: c.textMuted, fontSize: 11),
+                ),
+              ],
             ),
           ),
+          const SizedBox(width: 8),
           RichText(
             text: TextSpan(
-              text: '${e.setsThisWeek}',
+              text: '${e.points}',
               style: AppTheme.display(
                   color: c.accent, fontSize: 18, fontWeight: FontWeight.w800),
               children: [
                 TextSpan(
-                  text: ' sets',
+                  text: ' pts',
                   style: TextStyle(color: c.textMuted, fontSize: 11),
                 ),
               ],

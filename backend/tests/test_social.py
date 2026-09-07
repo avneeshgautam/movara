@@ -22,6 +22,7 @@ def require_database():
     with db.SessionLocal() as session:
         session.execute(delete(db.WorkoutEntry))
         session.execute(delete(db.Profile))
+        session.execute(delete(db.Run))
         session.commit()
 
 
@@ -41,6 +42,19 @@ def log_sets(key, uid, sets, when="2026-09-07"):
     )
 
 
+def upload_run(key, uid, run_id, metres, when="2026-09-07T07:00:00"):
+    return client.post(
+        "/api/runs",
+        json={
+            "id": run_id,
+            "startedAt": when,
+            "elapsedSeconds": 600,
+            "distanceMeters": metres,
+        },
+        headers=headers_for(key, uid),
+    )
+
+
 class TestLeaderboard:
     def test_profile_upsert_puts_you_on_the_board(self, local_signing_key):
         assert set_profile(local_signing_key, "alice", "Alice").status_code == 204
@@ -52,26 +66,41 @@ class TestLeaderboard:
         assert board[0]["isMe"] is True
         assert board[0]["rank"] == 1
         assert board[0]["setsThisWeek"] == 0
+        assert board[0]["points"] == 0
 
-    def test_ranks_by_sets_this_week(self, local_signing_key):
+    def test_points_combine_sets_and_running(self, local_signing_key):
         set_profile(local_signing_key, "alice", "Alice")
         set_profile(local_signing_key, "bob", "Bob")
+        # Alice: 3 sets = 30 pts. Bob: 1 set (10) + 2 km (40) = 50 pts.
         log_sets(local_signing_key, "alice", 3)
-        log_sets(local_signing_key, "bob", 5)
+        log_sets(local_signing_key, "bob", 1)
+        assert upload_run(local_signing_key, "bob", "r1", 2000).status_code == 204
 
-        r = client.get("/api/leaderboard", headers=headers_for(local_signing_key, "alice"))
-        board = r.json()
+        board = client.get(
+            "/api/leaderboard", headers=headers_for(local_signing_key, "alice")
+        ).json()
         assert [e["displayName"] for e in board] == ["Bob", "Alice"]
-        assert board[0]["setsThisWeek"] == 5
-        assert board[0]["rank"] == 1
-        # "isMe" is relative to the caller.
+        assert board[0]["points"] == 50
+        assert board[0]["kmThisWeek"] == 2.0
+        assert board[1]["points"] == 30
         assert board[1]["isMe"] is True
 
-    def test_last_weeks_sets_do_not_count(self, local_signing_key):
+    def test_run_upload_is_idempotent(self, local_signing_key):
+        set_profile(local_signing_key, "alice", "Alice")
+        upload_run(local_signing_key, "alice", "same-id", 1000)
+        upload_run(local_signing_key, "alice", "same-id", 1000)
+        board = client.get(
+            "/api/leaderboard", headers=headers_for(local_signing_key, "alice")
+        ).json()
+        # 1 km counted once = 20 pts, not 40.
+        assert board[0]["points"] == 20
+
+    def test_last_weeks_activity_does_not_count(self, local_signing_key):
         set_profile(local_signing_key, "alice", "Alice")
         log_sets(local_signing_key, "alice", 4, when="2026-08-01")
+        upload_run(local_signing_key, "alice", "old", 5000, when="2026-08-01T07:00:00")
         r = client.get("/api/leaderboard", headers=headers_for(local_signing_key, "alice"))
-        assert r.json()[0]["setsThisWeek"] == 0
+        assert r.json()[0]["points"] == 0
 
     def test_leaderboard_requires_auth(self):
         assert client.get("/api/leaderboard").status_code == 401

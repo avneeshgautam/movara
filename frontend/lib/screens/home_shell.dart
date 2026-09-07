@@ -38,7 +38,7 @@ class _HomeShellState extends State<HomeShell> {
   late final ApiService _api =
       ApiService(tokenProvider: widget.auth.idToken);
   final _reminders = ReminderScheduler();
-  final _runs = RunStore();
+  late final RunStore _runs = RunStore(uploader: _api.uploadRun);
   int _index = 0;
 
   // Entry list lives here, shared by Home (stats) and Workout (log), so a

@@ -5,7 +5,7 @@ sets logged this week. Friends-scoping comes later. Only names, photos and a
 weekly count are exposed -- never another user's individual entries.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
@@ -14,6 +14,11 @@ from sqlalchemy.orm import Session
 from .. import db
 from ..auth import current_uid
 from ..models import LeaderboardEntry, ProfileRequest
+
+# Points: reward a set and a kilometre. Tuned so a typical workout and a short
+# run land in a similar range.
+_POINTS_PER_SET = 10
+_POINTS_PER_KM = 20
 
 router = APIRouter()
 
@@ -44,9 +49,10 @@ def leaderboard(
     session: Session = Depends(db.get_session),
 ) -> list[LeaderboardEntry]:
     monday = _week_start()
+    monday_dt = datetime(monday.year, monday.month, monday.day)
 
     # Sets logged this week, per user.
-    totals = dict(
+    sets_by_user = dict(
         session.execute(
             select(
                 db.WorkoutEntry.user_id,
@@ -57,23 +63,40 @@ def leaderboard(
         ).all()
     )
 
+    # Metres run this week, per user.
+    metres_by_user = dict(
+        session.execute(
+            select(
+                db.Run.user_id,
+                func.coalesce(func.sum(db.Run.distance_meters), 0.0),
+            )
+            .where(db.Run.started_at >= monday_dt)
+            .group_by(db.Run.user_id)
+        ).all()
+    )
+
     profiles = session.scalars(select(db.Profile)).all()
 
-    rows = [
-        (p.user_id, p.display_name, p.photo_url, int(totals.get(p.user_id, 0)))
-        for p in profiles
-    ]
-    # Highest first; ties broken by name so the order is stable.
-    rows.sort(key=lambda r: (-r[3], r[1].lower()))
+    rows = []
+    for p in profiles:
+        sets = int(sets_by_user.get(p.user_id, 0))
+        km = float(metres_by_user.get(p.user_id, 0.0)) / 1000
+        points = round(sets * _POINTS_PER_SET + km * _POINTS_PER_KM)
+        rows.append((p.user_id, p.display_name, p.photo_url, sets, km, points))
+
+    # Highest points first; ties broken by name so the order is stable.
+    rows.sort(key=lambda r: (-r[5], r[1].lower()))
 
     return [
         LeaderboardEntry(
             userId=user_id,
             displayName=name,
             photoUrl=photo,
+            points=points,
             setsThisWeek=sets,
+            kmThisWeek=round(km, 2),
             rank=i + 1,
             isMe=user_id == uid,
         )
-        for i, (user_id, name, photo, sets) in enumerate(rows)
+        for i, (user_id, name, photo, sets, km, points) in enumerate(rows)
     ]

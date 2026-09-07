@@ -3,13 +3,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/run_record.dart';
 
-/// Saved runs, kept on the device.
+/// Saved runs, kept on the device and mirrored to the backend.
 ///
-/// Runs live in local storage rather than the backend: the API has no run
-/// endpoints yet, and this keeps the feature self-contained. The trade-off is
-/// that history does not follow you to another device or browser.
+/// Local storage is the source of truth for the UI; each run is also uploaded
+/// (best-effort, idempotent) via [uploader] so it can score on the
+/// leaderboard. Uploads that fail are retried on the next load.
 class RunStore extends ChangeNotifier {
+  RunStore({Future<void> Function(RunRecord)? uploader}) : _uploader = uploader;
+
   static const _key = 'saved_runs';
+
+  final Future<void> Function(RunRecord)? _uploader;
 
   List<RunRecord> _runs = [];
   bool _loaded = false;
@@ -33,12 +37,25 @@ class RunStore extends ChangeNotifier {
     }
     _loaded = true;
     notifyListeners();
+
+    // Backfill anything recorded before the backend had run sync, and retry
+    // uploads that failed earlier. Cheap: the server upserts by id.
+    _syncAll();
   }
 
   Future<void> add(RunRecord run) async {
     _runs = [run, ..._runs];
     await _persist();
     notifyListeners();
+    await _uploader?.call(run);
+  }
+
+  void _syncAll() {
+    final upload = _uploader;
+    if (upload == null) return;
+    for (final run in _runs) {
+      upload(run);
+    }
   }
 
   Future<void> remove(String id) async {
