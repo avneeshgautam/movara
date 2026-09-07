@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -35,22 +36,46 @@ class ApiService {
   Uri _uri(String path, [Map<String, String>? query]) =>
       Uri.parse('$apiBaseUrl$path').replace(queryParameters: query);
 
+  /// Retries transient failures so the free-tier backend's cold start (it
+  /// sleeps after ~15 min idle and takes ~30-50s to wake) rides out under the
+  /// caller's loading state instead of showing an error. Never retries a 4xx
+  /// (auth/validation) or [ChatUnavailable] -- those are real answers.
+  Future<T> _resilient<T>(Future<T> Function() action) async {
+    const maxAttempts = 6;
+    var delay = const Duration(seconds: 2);
+    for (var attempt = 1; ; attempt++) {
+      try {
+        return await action().timeout(const Duration(seconds: 20));
+      } catch (e) {
+        final transient = e is TimeoutException ||
+            e is http.ClientException ||
+            (e is ApiException && e.statusCode >= 500);
+        if (!transient || attempt >= maxAttempts) rethrow;
+        await Future<void>.delayed(delay);
+        const cap = Duration(seconds: 10);
+        delay = delay * 2 > cap ? cap : delay * 2;
+      }
+    }
+  }
+
   /// Sends the conversation to the assistant and returns its reply.
   ///
   /// Throws [ChatUnavailable] when the server has no model configured (503),
   /// so the UI can explain that rather than showing a generic error.
   Future<String> sendChat(List<ChatMessage> messages) async {
-    final response = await _client.post(
-      _uri('/chat'),
-      headers: await _headers(json: true),
-      body: jsonEncode({'messages': messages.map((m) => m.toJson()).toList()}),
-    );
-    if (response.statusCode == 503) {
-      throw const ChatUnavailable();
-    }
-    _checkOk(response);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return (data['reply'] as String?)?.trim() ?? '';
+    return _resilient(() async {
+      final response = await _client.post(
+        _uri('/chat'),
+        headers: await _headers(json: true),
+        body: jsonEncode({'messages': messages.map((m) => m.toJson()).toList()}),
+      );
+      if (response.statusCode == 503) {
+        throw const ChatUnavailable();
+      }
+      _checkOk(response);
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return (data['reply'] as String?)?.trim() ?? '';
+    });
   }
 
   /// Streams the assistant's reply as text chunks, so the UI can show it as
@@ -61,7 +86,8 @@ class ApiService {
     request.body =
         jsonEncode({'messages': messages.map((m) => m.toJson()).toList()});
 
-    final response = await _client.send(request);
+    final response =
+        await _client.send(request).timeout(const Duration(seconds: 20));
     if (response.statusCode == 503) {
       throw const ChatUnavailable();
     }
@@ -105,28 +131,37 @@ class ApiService {
   }
 
   Future<List<LeaderboardEntry>> fetchLeaderboard() async {
-    final response =
-        await _client.get(_uri('/leaderboard'), headers: await _headers());
-    _checkOk(response);
-    final list = jsonDecode(response.body) as List<dynamic>;
-    return list
-        .map((e) => LeaderboardEntry.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return _resilient(() async {
+      final response =
+          await _client.get(_uri('/leaderboard'), headers: await _headers());
+      _checkOk(response);
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map((e) => LeaderboardEntry.fromJson(e as Map<String, dynamic>))
+          .toList();
+    });
   }
 
   Future<List<Exercise>> fetchExercises() async {
-    final response = await _client.get(_uri('/exercises'), headers: await _headers());
-    _checkOk(response);
-    final list = jsonDecode(response.body) as List<dynamic>;
-    return list.map((e) => Exercise.fromJson(e as Map<String, dynamic>)).toList();
+    return _resilient(() async {
+      final response =
+          await _client.get(_uri('/exercises'), headers: await _headers());
+      _checkOk(response);
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list.map((e) => Exercise.fromJson(e as Map<String, dynamic>)).toList();
+    });
   }
 
   Future<List<WorkoutEntry>> fetchWorkoutEntries() async {
-    final response =
-        await _client.get(_uri('/workout-entries'), headers: await _headers());
-    _checkOk(response);
-    final list = jsonDecode(response.body) as List<dynamic>;
-    return list.map((e) => WorkoutEntry.fromJson(e as Map<String, dynamic>)).toList();
+    return _resilient(() async {
+      final response =
+          await _client.get(_uri('/workout-entries'), headers: await _headers());
+      _checkOk(response);
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map((e) => WorkoutEntry.fromJson(e as Map<String, dynamic>))
+          .toList();
+    });
   }
 
   Future<WorkoutEntry> addWorkoutEntry(WorkoutEntry entry) async {

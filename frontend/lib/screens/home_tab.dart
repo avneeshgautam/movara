@@ -47,6 +47,10 @@ class HomeTab extends StatelessWidget {
               if (snapshot.hasError) ...[
                 _BackendError(error: snapshot.error),
                 const SizedBox(height: 20),
+              ] else if (snapshot.connectionState ==
+                  ConnectionState.waiting) ...[
+                _WakingBanner(),
+                const SizedBox(height: 20),
               ],
 
               const SectionHeader(title: "Today's Overview", action: 'Edit Goal →'),
@@ -191,6 +195,31 @@ class HomeTab extends StatelessWidget {
     if (days == 1) return 'Yesterday';
     if (days < 7) return '$days days ago';
     return '${when.day}/${when.month}';
+  }
+}
+
+class _WakingBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+    return MovaraCard(
+      child: Row(
+        children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2, color: c.accent),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Waking the server… the free tier sleeps when idle.',
+              style: TextStyle(color: c.textSecondary, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

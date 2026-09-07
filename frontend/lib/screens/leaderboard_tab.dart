@@ -176,7 +176,18 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     final c = context.movara;
     return Padding(
       padding: const EdgeInsets.only(top: 40),
-      child: Center(child: CircularProgressIndicator(color: c.accent)),
+      child: Column(
+        children: [
+          CircularProgressIndicator(color: c.accent),
+          const SizedBox(height: 14),
+          Text('Waking the server…',
+              style: TextStyle(color: c.textMuted, fontSize: 12)),
+          const SizedBox(height: 2),
+          Text('The free server sleeps when idle; this takes a few seconds.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: c.textMuted, fontSize: 11)),
+        ],
+      ),
     );
   }
 
