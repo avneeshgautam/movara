@@ -214,6 +214,7 @@ class _ExerciseCard extends StatefulWidget {
 
 class _ExerciseCardState extends State<_ExerciseCard> {
   late List<_SetState> _sets;
+  bool _expanded = false;
 
   @override
   void initState() {
@@ -400,70 +401,108 @@ class _ExerciseCardState extends State<_ExerciseCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: c.accentSoft,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(ex.icon, color: c.accent, size: 26),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        ex.name,
-                        style: AppTheme.display(
-                          color: c.textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        ex.muscle,
-                        style: TextStyle(color: c.textMuted, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => _showDemo(context, ex),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          // Header — tap to expand/collapse. Collapsed by default so the whole
+          // list is scannable; expand one to record it.
+          GestureDetector(
+            onTap: () => setState(() => _expanded = !_expanded),
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(14, 14, 12, _expanded ? 10 : 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: c.accentSoft,
-                      border: Border.all(color: c.accent.withValues(alpha: 0.4)),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    child: Icon(ex.icon, color: c.accent, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.auto_awesome, size: 12, color: c.accent),
-                        const SizedBox(width: 5),
                         Text(
-                          'Demo',
+                          ex.name,
                           style: AppTheme.display(
-                            color: c.accent,
-                            fontSize: 11,
+                            color: c.textPrimary,
+                            fontSize: 15,
                             fontWeight: FontWeight.w700,
                           ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          ex.muscle,
+                          style: TextStyle(color: c.textMuted, fontSize: 11),
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  // Compact progress badge, always visible.
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: completed > 0 ? c.accentSoft : c.surface2,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '$completed/${_sets.length}',
+                      style: AppTheme.display(
+                        color: completed > 0 ? c.accent : c.textMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    color: c.textMuted,
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          if (_expanded) ...[
+          // Demo.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: GestureDetector(
+                onTap: () => _showDemo(context, ex),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: c.accentSoft,
+                    border: Border.all(color: c.accent.withValues(alpha: 0.4)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.auto_awesome, size: 12, color: c.accent),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Demo',
+                        style: AppTheme.display(
+                          color: c.accent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
 
@@ -546,6 +585,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               ),
             ),
           ),
+          ],
         ],
       ),
     );

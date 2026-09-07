@@ -4,8 +4,6 @@ import '../models/workout_entry.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
-import '../services/workout_timer.dart';
-import '../widgets/workout_timer_bar.dart';
 import 'workout_history.dart';
 import 'workout_session.dart';
 
@@ -32,19 +30,6 @@ class WorkoutTab extends StatefulWidget {
 
 class _WorkoutTabState extends State<WorkoutTab> {
   bool _showHistory = false;
-  final _timer = WorkoutTimer();
-
-  @override
-  void initState() {
-    super.initState();
-    _timer.load();
-  }
-
-  @override
-  void dispose() {
-    _timer.dispose();
-    super.dispose();
-  }
 
   Future<String?> _logSet(String exerciseName, int reps, double weightKg) async {
     try {
@@ -85,7 +70,7 @@ class _WorkoutTabState extends State<WorkoutTab> {
             child: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 6),
                   child: _SegmentedToggle(
                     left: 'Log',
                     right: 'History',
@@ -94,7 +79,6 @@ class _WorkoutTabState extends State<WorkoutTab> {
                         setState(() => _showHistory = history),
                   ),
                 ),
-                if (!_showHistory) WorkoutTimerBar(stopwatch: _timer),
                 Expanded(
                   child: _showHistory
                       ? WorkoutHistory(entries: entries)
@@ -131,7 +115,7 @@ class _SegmentedToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.movara;
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: c.surface2,
         border: Border.all(color: c.border),
@@ -155,17 +139,17 @@ class _SegmentedToggle extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 9),
+          padding: const EdgeInsets.symmetric(vertical: 6),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: selected ? c.accent : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
             label,
             style: AppTheme.display(
               color: selected ? Colors.white : c.textSecondary,
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
           ),

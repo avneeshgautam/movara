@@ -13,6 +13,7 @@ class MovaraHeader extends StatelessWidget {
     required this.onToggleTheme,
     this.onAvatarTap,
     this.photoUrl,
+    this.action,
   });
 
   final String username;
@@ -23,6 +24,9 @@ class MovaraHeader extends StatelessWidget {
   /// Account is no longer a bottom tab.
   final VoidCallback? onAvatarTap;
   final String? photoUrl;
+
+  /// Optional control shown left of the theme toggle (the timer button).
+  final Widget? action;
 
   static String greetingFor(DateTime now) {
     if (now.hour < 12) return 'Good Morning';
@@ -86,6 +90,10 @@ class MovaraHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          if (action != null) ...[
+            action!,
+            const SizedBox(width: 8),
+          ],
           _ThemeToggle(isDark: isDark, onTap: onToggleTheme),
           const SizedBox(width: 10),
           _Avatar(initial: initial, onTap: onAvatarTap, photoUrl: photoUrl),

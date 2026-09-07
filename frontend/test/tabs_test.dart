@@ -83,10 +83,15 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      // Session header + category tabs + first exercise.
+      // Session header + category tabs + first exercise (collapsed).
       expect(find.text('Workout'), findsOneWidget);
       expect(find.text('Chest'), findsOneWidget);
       expect(find.text('Bench Press'), findsOneWidget);
+
+      // Cards start collapsed; Demo appears once expanded.
+      expect(find.text('Demo'), findsNothing);
+      await tester.tap(find.text('Bench Press'));
+      await tester.pumpAndSettle();
       expect(find.text('Demo'), findsWidgets);
 
       // The dashboard sections belong to the Home tab only.
@@ -187,8 +192,11 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      // Bench Press ships with 3 default sets; one is logged today.
-      expect(find.text('1 / 3'), findsOneWidget);
+      // The collapsed card's badge reflects today's logged set.
+      expect(find.text('1/3'), findsOneWidget);
+      // Expanding shows the ticked set.
+      await tester.tap(find.text('Bench Press'));
+      await tester.pumpAndSettle();
       expect(find.byIcon(Icons.check), findsOneWidget);
     });
 
@@ -201,9 +209,11 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      // Several exercises all read "0 / 3"; what matters is that nothing is
-      // ticked and Bench Press did not keep yesterday's progress.
-      expect(find.text('1 / 3'), findsNothing);
+      // Nothing carried over: Bench Press badge is not 1/3, and once expanded
+      // there is no ticked set.
+      expect(find.text('1/3'), findsNothing);
+      await tester.tap(find.text('Bench Press'));
+      await tester.pumpAndSettle();
       expect(find.byIcon(Icons.check), findsNothing);
     });
   });

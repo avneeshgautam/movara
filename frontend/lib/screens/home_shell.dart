@@ -5,9 +5,12 @@ import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/reminder_scheduler.dart';
 import '../services/run_store.dart';
+import '../models/run_record.dart' show formatDuration;
+import '../services/workout_timer.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 import '../widgets/movara_header.dart';
+import '../widgets/workout_timer_bar.dart';
 import 'account_tab.dart';
 import 'feed_tab.dart';
 import 'leaderboard_tab.dart';
@@ -38,6 +41,7 @@ class _HomeShellState extends State<HomeShell> {
   late final ApiService _api =
       ApiService(tokenProvider: widget.auth.idToken);
   final _reminders = ReminderScheduler();
+  final _workoutTimer = WorkoutTimer();
   late final RunStore _runs = RunStore(uploader: _api.uploadRun);
   int _index = 0;
 
@@ -51,6 +55,7 @@ class _HomeShellState extends State<HomeShell> {
     _entriesFuture = _api.fetchWorkoutEntries();
     _reminders.load();
     _runs.load();
+    _workoutTimer.load();
     // Register name/photo so this user shows on the leaderboard.
     _api.upsertProfile(_displayName,
         photoUrl: widget.auth.currentUser?.photoURL);
@@ -60,6 +65,7 @@ class _HomeShellState extends State<HomeShell> {
   void dispose() {
     _reminders.dispose();
     _runs.dispose();
+    _workoutTimer.dispose();
     _api.dispose();
     super.dispose();
   }
@@ -84,6 +90,23 @@ class _HomeShellState extends State<HomeShell> {
     // Re-fetch when opening Home so its stats reflect sets just logged on the
     // Workout tab, even if the live refresh was missed.
     if (i == 0) _reload();
+  }
+
+  /// The workout stopwatch + rest timer, opened from the header button.
+  void _openTimer() {
+    final c = context.movara;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: c.bg,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: WorkoutTimerBar(stopwatch: _workoutTimer),
+      ),
+    );
   }
 
   /// The Movara assistant, opened from the floating button.
@@ -150,6 +173,7 @@ class _HomeShellState extends State<HomeShell> {
             onToggleTheme: widget.onToggleTheme,
             photoUrl: widget.auth.currentUser?.photoURL,
             onAvatarTap: _openAccount,
+            action: _TimerButton(timer: _workoutTimer, onTap: _openTimer),
           ),
           Expanded(
             child: IndexedStack(
@@ -168,6 +192,13 @@ class _HomeShellState extends State<HomeShell> {
                 RunningTab(store: _runs),
                 RemindersTab(scheduler: _reminders),
                 LeaderboardTab(api: _api),
+                AccountTab(
+                  entriesFuture: _entriesFuture,
+                  displayName: _displayName,
+                  email: widget.auth.currentUser?.email,
+                  photoUrl: widget.auth.currentUser?.photoURL,
+                  onSignOut: widget.auth.signOut,
+                ),
               ],
             ),
           ),
@@ -194,6 +225,7 @@ class _TabBar extends StatelessWidget {
     (icon: Icons.directions_run, label: 'Running'),
     (icon: Icons.water_drop_outlined, label: 'Reminders'),
     (icon: Icons.chat_bubble_outline, label: 'Feed'),
+    (icon: Icons.person_outline, label: 'Account'),
   ];
 
   @override
@@ -292,6 +324,55 @@ class _ChatFab extends StatelessWidget {
           child: const Icon(Icons.auto_awesome, color: Colors.white, size: 24),
         ),
       ),
+    );
+  }
+}
+
+/// Compact header control: a timer icon that shows the running workout time
+/// when the stopwatch is going, and opens the full timer sheet on tap.
+class _TimerButton extends StatelessWidget {
+  const _TimerButton({required this.timer, required this.onTap});
+
+  final WorkoutTimer timer;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+    return AnimatedBuilder(
+      animation: timer,
+      builder: (context, _) {
+        final running = timer.isRunning;
+        return GestureDetector(
+          onTap: onTap,
+          child: Container(
+            height: 36,
+            padding: EdgeInsets.symmetric(horizontal: running ? 12 : 10),
+            decoration: BoxDecoration(
+              color: running ? c.accentSoft : c.surface2,
+              border: Border.all(color: running ? c.accent : c.border),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.timer_outlined,
+                    size: 18, color: running ? c.accent : c.textSecondary),
+                if (running) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    formatDuration(timer.elapsed),
+                    style: AppTheme.display(
+                        color: c.accent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
