@@ -51,6 +51,11 @@ class _MovaraAppState extends State<MovaraApp> {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: _mode,
+      // Crossfade the palette on a theme switch instead of snapping. The
+      // colour tokens lerp (see MovaraColors.lerp), so a longer duration makes
+      // the transition a smooth, deliberate animation.
+      themeAnimationDuration: const Duration(milliseconds: 350),
+      themeAnimationCurve: Curves.easeInOut,
       // Builder so MediaQuery is in scope: with ThemeMode.system the app has
       // to read the platform brightness to know which way the toggle points.
       home: Builder(

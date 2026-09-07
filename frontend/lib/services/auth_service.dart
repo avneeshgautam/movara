@@ -11,7 +11,11 @@ class AuthService {
 
   final FirebaseAuth _auth;
 
-  Stream<User?> get userChanges => _auth.authStateChanges();
+  /// Cached deliberately. authStateChanges() returns a NEW stream on every
+  /// call, and AuthGate reads this on each rebuild -- so without caching, a
+  /// theme toggle would hand its StreamBuilder a fresh stream, reset it to the
+  /// loading state, and remount the whole shell (losing the current tab).
+  late final Stream<User?> userChanges = _auth.authStateChanges();
   User? get currentUser => _auth.currentUser;
   bool get isSignedIn => _auth.currentUser != null;
 
