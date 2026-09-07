@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 import '../widgets/movara_header.dart';
 import 'account_tab.dart';
+import 'feed_tab.dart';
 import 'home_tab.dart';
 import 'reminders_tab.dart';
 import 'running_tab.dart';
@@ -81,6 +82,34 @@ class _HomeShellState extends State<HomeShell> {
     if (i == 0) _reload();
   }
 
+  /// Account now opens from the header avatar rather than a bottom tab.
+  void _openAccount() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (context) {
+        final c = context.movara;
+        return Scaffold(
+          backgroundColor: c.bg,
+          appBar: AppBar(
+            backgroundColor: c.surface,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            iconTheme: IconThemeData(color: c.textPrimary),
+            title: Text('Account',
+                style: AppTheme.display(
+                    color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
+          ),
+          body: AccountTab(
+            entriesFuture: _entriesFuture,
+            displayName: _displayName,
+            email: widget.auth.currentUser?.email,
+            photoUrl: widget.auth.currentUser?.photoURL,
+            onSignOut: widget.auth.signOut,
+          ),
+        );
+      },
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.movara;
@@ -93,6 +122,8 @@ class _HomeShellState extends State<HomeShell> {
             username: _displayName,
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
+            photoUrl: widget.auth.currentUser?.photoURL,
+            onAvatarTap: _openAccount,
           ),
           Expanded(
             child: IndexedStack(
@@ -110,13 +141,7 @@ class _HomeShellState extends State<HomeShell> {
                 ),
                 RunningTab(store: _runs),
                 RemindersTab(scheduler: _reminders),
-                AccountTab(
-                  entriesFuture: _entriesFuture,
-                  displayName: _displayName,
-                  email: widget.auth.currentUser?.email,
-                  photoUrl: widget.auth.currentUser?.photoURL,
-                  onSignOut: widget.auth.signOut,
-                ),
+                FeedTab(api: _api),
               ],
             ),
           ),
@@ -141,7 +166,7 @@ class _TabBar extends StatelessWidget {
     (icon: Icons.fitness_center, label: 'Workout'),
     (icon: Icons.directions_run, label: 'Running'),
     (icon: Icons.water_drop_outlined, label: 'Reminders'),
-    (icon: Icons.person_outline, label: 'Account'),
+    (icon: Icons.chat_bubble_outline, label: 'Feed'),
   ];
 
   @override

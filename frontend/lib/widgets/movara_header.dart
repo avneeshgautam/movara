@@ -11,11 +11,18 @@ class MovaraHeader extends StatelessWidget {
     required this.username,
     required this.isDark,
     required this.onToggleTheme,
+    this.onAvatarTap,
+    this.photoUrl,
   });
 
   final String username;
   final bool isDark;
   final VoidCallback onToggleTheme;
+
+  /// Opens the account screen. The avatar is the entry point to it now that
+  /// Account is no longer a bottom tab.
+  final VoidCallback? onAvatarTap;
+  final String? photoUrl;
 
   static String greetingFor(DateTime now) {
     if (now.hour < 12) return 'Good Morning';
@@ -81,7 +88,7 @@ class MovaraHeader extends StatelessWidget {
           const SizedBox(width: 8),
           _ThemeToggle(isDark: isDark, onTap: onToggleTheme),
           const SizedBox(width: 10),
-          _Avatar(initial: initial),
+          _Avatar(initial: initial, onTap: onAvatarTap, photoUrl: photoUrl),
         ],
       ),
     );
@@ -128,15 +135,20 @@ class _ThemeToggle extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.initial});
+  const _Avatar({required this.initial, this.onTap, this.photoUrl});
 
   final String initial;
+  final VoidCallback? onTap;
+  final String? photoUrl;
 
   @override
   Widget build(BuildContext context) {
     final c = context.movara;
 
-    return SizedBox(
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
       width: 44,
       height: 44,
       child: Stack(
@@ -145,19 +157,16 @@ class _Avatar extends StatelessWidget {
             width: 44,
             height: 44,
             alignment: Alignment.center,
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: c.accentSoft,
               shape: BoxShape.circle,
               border: Border.all(color: c.accent, width: 2),
             ),
-            child: Text(
-              initial,
-              style: AppTheme.display(
-                color: c.accent,
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            child: photoUrl != null && photoUrl!.isNotEmpty
+                ? Image.network(photoUrl!, fit: BoxFit.cover, width: 44, height: 44,
+                    errorBuilder: (_, __, ___) => _initialText(c))
+                : _initialText(c),
           ),
           // Online dot.
           Positioned(
@@ -175,6 +184,16 @@ class _Avatar extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
+
+  Widget _initialText(MovaraColors c) => Text(
+        initial,
+        style: AppTheme.display(
+          color: c.accent,
+          fontSize: 17,
+          fontWeight: FontWeight.w700,
+        ),
+      );
 }

@@ -5,6 +5,7 @@ client already speaks -- they mirror the old Java DTOs one-for-one.
 """
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -55,3 +56,18 @@ class WorkoutEntryResponse(BaseModel):
     weightKg: float | None = None
     performedAt: date
     notes: str | None = None
+
+
+class ChatMessage(BaseModel):
+    """One turn in the assistant conversation."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+
+
+class ChatResponse(BaseModel):
+    reply: str

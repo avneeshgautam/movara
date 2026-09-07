@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/chat_message.dart';
 import '../models/exercise.dart';
 import '../models/workout_entry.dart';
 import 'api_config.dart';
@@ -31,6 +32,24 @@ class ApiService {
 
   Uri _uri(String path, [Map<String, String>? query]) =>
       Uri.parse('$apiBaseUrl$path').replace(queryParameters: query);
+
+  /// Sends the conversation to the assistant and returns its reply.
+  ///
+  /// Throws [ChatUnavailable] when the server has no model configured (503),
+  /// so the UI can explain that rather than showing a generic error.
+  Future<String> sendChat(List<ChatMessage> messages) async {
+    final response = await _client.post(
+      _uri('/chat'),
+      headers: await _headers(json: true),
+      body: jsonEncode({'messages': messages.map((m) => m.toJson()).toList()}),
+    );
+    if (response.statusCode == 503) {
+      throw const ChatUnavailable();
+    }
+    _checkOk(response);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return (data['reply'] as String?)?.trim() ?? '';
+  }
 
   Future<List<Exercise>> fetchExercises() async {
     final response = await _client.get(_uri('/exercises'), headers: await _headers());
@@ -82,4 +101,9 @@ class ApiException implements Exception {
 
   @override
   String toString() => 'ApiException($statusCode): $body';
+}
+
+/// Thrown when the assistant backend has no API key configured.
+class ChatUnavailable implements Exception {
+  const ChatUnavailable();
 }

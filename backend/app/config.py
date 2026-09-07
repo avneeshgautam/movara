@@ -30,6 +30,14 @@ ALLOWED_ORIGINS = os.getenv(
 # client config too); auth is rejected outright when this is unset.
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "")
 
+# Movara chatbot. The key is a secret -- set it in the Render dashboard, never
+# in git. Without it the /api/chat endpoint returns 503 so the app can say the
+# assistant isn't set up yet. The model is configurable so it can be changed
+# without a code change.
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+CHAT_MODEL = os.getenv("CHAT_MODEL", "claude-haiku-4-5-20251001")
+CHAT_MAX_TOKENS = int(os.getenv("CHAT_MAX_TOKENS", "600"))
+
 
 def cors_settings() -> dict:
     """Translate the ALLOWED_ORIGINS patterns into CORSMiddleware kwargs.
