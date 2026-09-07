@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
@@ -24,6 +26,15 @@ class _FeedTabState extends State<FeedTab> {
   bool _sending = false;
   bool _unavailable = false;
 
+  // Typewriter reveal: the stream fills [_streamFull]; a ticker reveals it a
+  // few characters at a time so the reply types out smoothly, no matter how
+  // the network chunks it.
+  Timer? _typer;
+  String _streamFull = '';
+  int _revealed = 0;
+  bool _streamDone = false;
+  int? _assistantIndex;
+
   static const _suggestions = [
     'Suggest a 20-minute workout',
     'How do I run my first 5K?',
@@ -32,6 +43,7 @@ class _FeedTabState extends State<FeedTab> {
 
   @override
   void dispose() {
+    _typer?.cancel();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -46,48 +58,74 @@ class _FeedTabState extends State<FeedTab> {
       _input.clear();
       _sending = true;
       _unavailable = false;
+      _streamFull = '';
+      _revealed = 0;
+      _streamDone = false;
+      _assistantIndex = null;
     });
     _scrollToEnd();
 
-    // Snapshot the conversation to send (before the streaming reply is added).
     final toSend = List<ChatMessage>.of(_messages);
-    var started = false;
-    final buffer = StringBuffer();
+    _startTyper();
 
     try {
       await for (final delta in widget.api.sendChatStream(toSend)) {
-        if (delta.isEmpty) continue;
-        buffer.write(delta);
-        if (!mounted) return;
+        _streamFull += delta;
+      }
+      if (_streamFull.isEmpty) {
+        _streamFull =
+            "I couldn't reach the assistant just now. Try again in a moment.";
+      }
+    } on ChatUnavailable {
+      _typer?.cancel();
+      if (mounted) setState(() => _unavailable = true);
+      _finishStream();
+      return;
+    } catch (_) {
+      if (_streamFull.isEmpty) {
+        _streamFull =
+            "I couldn't reach the assistant just now. Try again in a moment.";
+      }
+    } finally {
+      _streamDone = true;
+    }
+  }
+
+  /// Reveals a few characters per tick from whatever has streamed in so far.
+  void _startTyper() {
+    _typer?.cancel();
+    _typer = Timer.periodic(const Duration(milliseconds: 16), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      if (_revealed < _streamFull.length) {
+        // Proportional step: catches up quickly on long replies, eases near
+        // the end -- so it reads as typing, not a dump.
+        final remaining = _streamFull.length - _revealed;
+        _revealed += (remaining ~/ 20).clamp(1, remaining);
         setState(() {
-          if (!started) {
-            // First chunk: the dots give way to a real, growing bubble.
-            _messages.add(ChatMessage(role: 'assistant', content: buffer.toString()));
-            started = true;
+          final shown = _streamFull.substring(0, _revealed);
+          if (_assistantIndex == null) {
+            _messages.add(ChatMessage(role: 'assistant', content: shown));
+            _assistantIndex = _messages.length - 1;
           } else {
-            _messages[_messages.length - 1] =
-                ChatMessage(role: 'assistant', content: buffer.toString());
+            _messages[_assistantIndex!] =
+                ChatMessage(role: 'assistant', content: shown);
           }
         });
         _scrollToEnd();
+      } else if (_streamDone) {
+        _finishStream();
       }
-      if (!started && mounted) {
-        setState(() => _messages.add(const ChatMessage(
-            role: 'assistant',
-            content: "I couldn't reach the assistant just now. Try again in a moment.")));
-      }
-    } on ChatUnavailable {
-      if (mounted) setState(() => _unavailable = true);
-    } catch (_) {
-      if (mounted && !started) {
-        setState(() => _messages.add(const ChatMessage(
-            role: 'assistant',
-            content: "I couldn't reach the assistant just now. Try again in a moment.")));
-      }
-    } finally {
-      if (mounted) setState(() => _sending = false);
-      _scrollToEnd();
-    }
+    });
+  }
+
+  void _finishStream() {
+    _typer?.cancel();
+    _typer = null;
+    if (mounted) setState(() => _sending = false);
+    _scrollToEnd();
   }
 
   void _scrollToEnd() {
