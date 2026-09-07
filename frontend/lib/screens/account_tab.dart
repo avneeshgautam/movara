@@ -39,7 +39,6 @@ class _AccountTabState extends State<AccountTab> {
   String get _handle => widget.email ?? 'Signed in';
 
   final _usernameController = TextEditingController();
-  bool _usernameLoaded = false;
   bool _savingUsername = false;
   String? _usernameMsg;
 
@@ -59,12 +58,12 @@ class _AccountTabState extends State<AccountTab> {
     try {
       final me = await widget.api.fetchMyProfile();
       if (!mounted) return;
-      setState(() {
-        _usernameController.text = me.username ?? '';
-        _usernameLoaded = true;
-      });
+      // Only prefill if the user hasn't already started typing.
+      if (_usernameController.text.isEmpty) {
+        setState(() => _usernameController.text = me.username ?? '');
+      }
     } catch (_) {
-      if (mounted) setState(() => _usernameLoaded = true);
+      // Prefill is best-effort; the field is editable regardless.
     }
   }
 
@@ -194,7 +193,6 @@ class _AccountTabState extends State<AccountTab> {
               Expanded(
                 child: TextField(
                   controller: _usernameController,
-                  enabled: _usernameLoaded,
                   maxLength: 40,
                   style: TextStyle(color: c.textPrimary, fontSize: 14),
                   decoration: InputDecoration(
