@@ -22,6 +22,7 @@ class RunRecord {
     required this.elapsedSeconds,
     required this.distanceMeters,
     required this.route,
+    this.movingSeconds = 0,
   });
 
   final String id;
@@ -30,14 +31,22 @@ class RunRecord {
   final double distanceMeters;
   final List<RunPoint> route;
 
+  /// Time spent actually moving (Strava-style), used for pace. Older runs
+  /// saved before this existed have 0 and fall back to elapsed time.
+  final int movingSeconds;
+
   double get distanceKm => distanceMeters / 1000;
 
   Duration get elapsed => Duration(seconds: elapsedSeconds);
 
-  /// Seconds per kilometre. Zero until enough distance exists to be meaningful
-  /// — a few GPS jitters shouldn't produce a wild pace.
+  /// Seconds counted toward pace: moving time when we have it, else elapsed.
+  int get paceBaseSeconds => movingSeconds > 0 ? movingSeconds : elapsedSeconds;
+
+  /// Seconds per kilometre, based on moving time so that standing still does
+  /// not drag the pace down. Zero until enough distance exists to be
+  /// meaningful — a few GPS jitters shouldn't produce a wild pace.
   double get paceSecondsPerKm =>
-      distanceKm > 0.05 ? elapsedSeconds / distanceKm : 0;
+      distanceKm > 0.05 ? paceBaseSeconds / distanceKm : 0;
 
   /// Rough estimate only: running burns very roughly 65 kcal per km for an
   /// average adult. Deliberately simple and deterministic — there is no
@@ -48,6 +57,7 @@ class RunRecord {
         'id': id,
         'startedAt': startedAt.toIso8601String(),
         'elapsedSeconds': elapsedSeconds,
+        'movingSeconds': movingSeconds,
         'distanceMeters': distanceMeters,
         'route': route.map((p) => p.toJson()).toList(),
       };
@@ -56,6 +66,7 @@ class RunRecord {
         id: json['id'] as String,
         startedAt: DateTime.parse(json['startedAt'] as String),
         elapsedSeconds: json['elapsedSeconds'] as int,
+        movingSeconds: json['movingSeconds'] as int? ?? 0,
         distanceMeters: (json['distanceMeters'] as num).toDouble(),
         route: (json['route'] as List<dynamic>)
             .map((p) => RunPoint.fromJson(p as Map<String, dynamic>))

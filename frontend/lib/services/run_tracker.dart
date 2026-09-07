@@ -37,6 +37,14 @@ class RunTracker extends ChangeNotifier {
   /// real movement rather than the position estimate drifting.
   static const _accuracyStepFactor = 0.5;
 
+  /// Below this speed the runner is treated as stopped, so the time isn't
+  /// counted toward moving time (Strava-style auto-pause). ~1.4 km/h.
+  static const _minMovingSpeed = 0.4; // m/s
+
+  /// A single moving interval is capped, so a long no-signal gap between two
+  /// fixes doesn't get counted in full as "moving".
+  static const _maxStepGapMs = 12000;
+
   TrackerState _state = TrackerState.idle;
 
   /// When recording began, and time banked from earlier running segments.
@@ -51,6 +59,8 @@ class RunTracker extends ChangeNotifier {
   RunPoint? _current;
   String? _error;
   double? _accuracyMetres;
+  int _movingMillis = 0;
+  DateTime? _lastStepAt;
 
   TrackerState get state => _state;
   Duration get elapsed {
@@ -78,9 +88,15 @@ class RunTracker extends ChangeNotifier {
   bool get isPaused => _state == TrackerState.paused;
   bool get isActive => isRunning || isPaused || _state == TrackerState.acquiring;
 
-  /// Seconds per km so far.
-  double get paceSecondsPerKm =>
-      distanceKm > 0.05 ? elapsed.inSeconds / distanceKm : 0;
+  /// Time spent actually moving so far.
+  int get movingSeconds => _movingMillis ~/ 1000;
+
+  /// Seconds per km so far, based on moving time so stops don't drag it down.
+  double get paceSecondsPerKm {
+    if (distanceKm <= 0.05) return 0;
+    final base = _movingMillis > 0 ? _movingMillis / 1000 : elapsed.inSeconds;
+    return base / distanceKm;
+  }
 
   int get estimatedCalories => (distanceKm * 65).round();
 
@@ -163,8 +179,26 @@ class RunTracker extends ChangeNotifier {
         return;
       }
       _distanceMeters += metres;
+
+      // Count the interval toward moving time only if it was covered at a
+      // real pace; a slow crawl between far-apart fixes reads as a stop.
+      final now = DateTime.now();
+      if (_lastStepAt != null) {
+        final gapMs = now.difference(_lastStepAt!).inMilliseconds;
+        if (gapMs > 0) {
+          final speed = metres / (gapMs / 1000); // m/s
+          if (speed >= _minMovingSpeed) {
+            _movingMillis += gapMs.clamp(0, _maxStepGapMs);
+          }
+        }
+      }
+      _lastStepAt = now;
     }
 
+    if (_route.isEmpty) {
+      // First recorded point: start the moving-time reference here.
+      _lastStepAt = DateTime.now();
+    }
     _route.add(point);
     notifyListeners();
   }
@@ -207,6 +241,7 @@ class RunTracker extends ChangeNotifier {
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       startedAt: began,
       elapsedSeconds: total.inSeconds,
+      movingSeconds: movingSeconds,
       distanceMeters: _distanceMeters,
       route: List.of(_route),
     );
@@ -225,6 +260,8 @@ class RunTracker extends ChangeNotifier {
     _startedAt = null;
     _segmentStart = null;
     _banked = Duration.zero;
+    _movingMillis = 0;
+    _lastStepAt = null;
     _distanceMeters = 0;
     _route.clear();
     _current = null;
