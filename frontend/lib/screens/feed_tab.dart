@@ -72,23 +72,34 @@ class _FeedTabState extends State<FeedTab> {
       await for (final delta in widget.api.sendChatStream(toSend)) {
         _streamFull += delta;
       }
-      if (_streamFull.isEmpty) {
-        _streamFull =
-            "I couldn't reach the assistant just now. Try again in a moment.";
-      }
     } on ChatUnavailable {
       _typer?.cancel();
       if (mounted) setState(() => _unavailable = true);
       _finishStream();
       return;
     } catch (_) {
-      if (_streamFull.isEmpty) {
-        _streamFull =
-            "I couldn't reach the assistant just now. Try again in a moment.";
-      }
-    } finally {
-      _streamDone = true;
+      // Streaming failed; the non-streaming fallback below will try to recover.
     }
+
+    // If streaming produced nothing (empty stream, proxy buffering, an error
+    // mid-way), fall back to the plain request, which is the proven path.
+    if (_streamFull.trim().isEmpty) {
+      try {
+        _streamFull = await widget.api.sendChat(toSend);
+      } on ChatUnavailable {
+        _typer?.cancel();
+        if (mounted) setState(() => _unavailable = true);
+        _finishStream();
+        return;
+      } catch (_) {
+        // fall through to the generic message
+      }
+    }
+    if (_streamFull.trim().isEmpty) {
+      _streamFull =
+          "I couldn't reach the assistant just now. Try again in a moment.";
+    }
+    _streamDone = true;
   }
 
   /// Reveals a few characters per tick from whatever has streamed in so far.
