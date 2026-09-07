@@ -49,7 +49,7 @@ class OverlayCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 22),
               child: Column(
                 children: [
-                  // 1. Brand at the top.
+                  // 1. Brand at the top, with a byline.
                   Text(
                     'MOVARA',
                     style: AppTheme.display(
@@ -58,6 +58,17 @@ class OverlayCard extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                       letterSpacing: 4,
                     ).copyWith(shadows: _shadows),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'By Avneesh Gautam',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 0.5,
+                      shadows: _shadows,
+                    ),
                   ),
                   Container(
                     margin: const EdgeInsets.only(top: 8),
