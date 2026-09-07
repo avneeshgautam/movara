@@ -53,7 +53,7 @@ class RouteMap extends StatelessWidget {
       mapController: controller,
       options: MapOptions(
         initialCenter: _centre,
-        initialZoom: route.isEmpty && live == null ? 4 : 16,
+        initialZoom: route.isEmpty && live == null ? 4 : 17,
         interactionOptions: InteractionOptions(
           flags: interactive ? InteractiveFlag.all : InteractiveFlag.none,
         ),
@@ -61,8 +61,8 @@ class RouteMap extends StatelessWidget {
         initialCameraFit: points.length > 1
             ? CameraFit.coordinates(
                 coordinates: points,
-                padding: const EdgeInsets.all(36),
-                maxZoom: 17,
+                padding: const EdgeInsets.all(22),
+                maxZoom: 18,
               )
             : null,
       ),

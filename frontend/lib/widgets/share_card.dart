@@ -60,14 +60,28 @@ class ShareCard extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'MOVARA',
-                            style: AppTheme.display(
-                              color: c.accent,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 2.4,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'MOVARA',
+                                style: AppTheme.display(
+                                  color: c.accent,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 2.4,
+                                ),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                'By Avneesh Gautam',
+                                style: TextStyle(
+                                  color: c.textSecondary,
+                                  fontSize: 9,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ],
                           ),
                           Text(
                             DateFormat('d MMM yyyy').format(run.startedAt),
