@@ -5,10 +5,13 @@ sends the whole short conversation; this stays stateless. Keys live only in
 the server environment, so they never reach the app.
 """
 
+import json
 import logging
+from collections.abc import Iterator
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 from .. import config
 from ..auth import current_uid
@@ -60,6 +63,93 @@ def chat(req: ChatRequest, uid: str = Depends(current_uid)) -> ChatResponse:
         raise HTTPException(status_code=502, detail="Couldn't reach the assistant.")
 
     return ChatResponse(reply=reply or "…")
+
+
+def _prepare(req: ChatRequest, uid: str) -> tuple[str, list[dict]]:
+    provider = config.chat_provider()
+    if provider is None:
+        raise HTTPException(
+            status_code=503,
+            detail="The assistant isn't set up yet. Add a GEMINI_API_KEY "
+            "(free) or ANTHROPIC_API_KEY on the server.",
+        )
+    messages = [
+        {"role": m.role, "content": m.content}
+        for m in req.messages
+        if m.content.strip()
+    ][-_MAX_TURNS:]
+    if not messages:
+        raise HTTPException(status_code=400, detail="Say something first.")
+    return provider, messages
+
+
+@router.post("/api/chat/stream")
+def chat_stream(req: ChatRequest, uid: str = Depends(current_uid)):
+    """Streams the reply as plain-text chunks so the app can show it as it is
+    written, instead of waiting for the whole thing."""
+    provider, messages = _prepare(req, uid)
+
+    def body() -> Iterator[str]:
+        try:
+            if provider == "gemini":
+                yield from _stream_gemini(messages)
+            else:
+                # Anthropic path isn't streamed here; send it in one chunk.
+                yield _call_anthropic(messages)
+        except httpx.HTTPError as exc:
+            logger.warning("Chat stream error: %s", exc)
+
+    return StreamingResponse(body(), media_type="text/plain; charset=utf-8")
+
+
+def _stream_gemini(messages: list[dict]) -> Iterator[str]:
+    contents = [
+        {
+            "role": "model" if m["role"] == "assistant" else "user",
+            "parts": [{"text": m["content"]}],
+        }
+        for m in messages
+    ]
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{config.GEMINI_MODEL}:streamGenerateContent"
+    )
+    headers = {
+        "x-goog-api-key": config.GEMINI_API_KEY,
+        "content-type": "application/json",
+    }
+    # Try with low thinking; if the model rejects thinkingConfig, retry without.
+    for thinking in (True, False):
+        with httpx.stream(
+            "POST",
+            url,
+            params={"alt": "sse"},
+            headers=headers,
+            json=_gemini_body(contents, thinking=thinking),
+            timeout=60,
+        ) as response:
+            if response.status_code == 400 and thinking:
+                continue
+            if response.status_code != 200:
+                response.read()
+                logger.warning("Chat stream %s", response.status_code)
+                return
+            for line in response.iter_lines():
+                if not line.startswith("data:"):
+                    continue
+                payload = line[len("data:"):].strip()
+                if not payload or payload == "[DONE]":
+                    continue
+                try:
+                    data = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                for cand in data.get("candidates", []):
+                    for part in cand.get("content", {}).get("parts", []):
+                        text = part.get("text")
+                        if text:
+                            yield text
+            return
 
 
 def _call_anthropic(messages: list[dict]) -> str:

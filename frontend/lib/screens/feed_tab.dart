@@ -49,14 +49,37 @@ class _FeedTabState extends State<FeedTab> {
     });
     _scrollToEnd();
 
+    // Snapshot the conversation to send (before the streaming reply is added).
+    final toSend = List<ChatMessage>.of(_messages);
+    var started = false;
+    final buffer = StringBuffer();
+
     try {
-      final reply = await widget.api.sendChat(_messages);
-      if (!mounted) return;
-      setState(() => _messages.add(ChatMessage(role: 'assistant', content: reply)));
+      await for (final delta in widget.api.sendChatStream(toSend)) {
+        if (delta.isEmpty) continue;
+        buffer.write(delta);
+        if (!mounted) return;
+        setState(() {
+          if (!started) {
+            // First chunk: the dots give way to a real, growing bubble.
+            _messages.add(ChatMessage(role: 'assistant', content: buffer.toString()));
+            started = true;
+          } else {
+            _messages[_messages.length - 1] =
+                ChatMessage(role: 'assistant', content: buffer.toString());
+          }
+        });
+        _scrollToEnd();
+      }
+      if (!started && mounted) {
+        setState(() => _messages.add(const ChatMessage(
+            role: 'assistant',
+            content: "I couldn't reach the assistant just now. Try again in a moment.")));
+      }
     } on ChatUnavailable {
       if (mounted) setState(() => _unavailable = true);
     } catch (_) {
-      if (mounted) {
+      if (mounted && !started) {
         setState(() => _messages.add(const ChatMessage(
             role: 'assistant',
             content: "I couldn't reach the assistant just now. Try again in a moment.")));
@@ -95,10 +118,12 @@ class _FeedTabState extends State<FeedTab> {
   }
 
   Widget _list(BuildContext context) {
+    final awaitingFirst =
+        _sending && (_messages.isEmpty || _messages.last.isUser);
     return ListView.builder(
       controller: _scroll,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      itemCount: _messages.length + (_sending ? 1 : 0),
+      itemCount: _messages.length + (awaitingFirst ? 1 : 0),
       itemBuilder: (context, i) {
         if (i == _messages.length) return _typing(context);
         return _bubble(context, _messages[i]);

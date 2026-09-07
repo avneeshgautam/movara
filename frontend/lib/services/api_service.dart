@@ -53,6 +53,24 @@ class ApiService {
     return (data['reply'] as String?)?.trim() ?? '';
   }
 
+  /// Streams the assistant's reply as text chunks, so the UI can show it as
+  /// it's written. Throws [ChatUnavailable] on 503.
+  Stream<String> sendChatStream(List<ChatMessage> messages) async* {
+    final request = http.Request('POST', _uri('/chat/stream'));
+    request.headers.addAll(await _headers(json: true));
+    request.body =
+        jsonEncode({'messages': messages.map((m) => m.toJson()).toList()});
+
+    final response = await _client.send(request);
+    if (response.statusCode == 503) {
+      throw const ChatUnavailable();
+    }
+    if (response.statusCode != 200) {
+      throw Exception('chat failed: ${response.statusCode}');
+    }
+    yield* response.stream.transform(utf8.decoder);
+  }
+
   /// Registers (or updates) the signed-in user's name and photo so they can
   /// appear on the leaderboard. Best-effort: failures are swallowed.
   Future<void> upsertProfile(String displayName, {String? photoUrl}) async {

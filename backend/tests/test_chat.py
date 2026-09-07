@@ -122,3 +122,84 @@ class TestGemini:
         )
         assert r.status_code == 200
         assert "generativelanguage" in calls["host"]
+
+
+class _FakeStream:
+    """Minimal stand-in for httpx.stream's context manager."""
+
+    def __init__(self, status, lines):
+        self.status_code = status
+        self._lines = lines
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return b""
+
+    def iter_lines(self):
+        yield from self._lines
+
+
+class TestChatStream:
+    def test_requires_auth(self):
+        r = client.post("/api/chat/stream", json={"messages": [{"role": "user", "content": "hi"}]})
+        assert r.status_code == 401
+
+    def test_503_without_key(self, monkeypatch, auth_headers):
+        monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")
+        monkeypatch.setattr(config, "GEMINI_API_KEY", "")
+        r = client.post(
+            "/api/chat/stream",
+            json={"messages": [{"role": "user", "content": "hi"}]},
+            headers=auth_headers,
+        )
+        assert r.status_code == 503
+
+    def test_streams_gemini_text_chunks(self, monkeypatch, auth_headers):
+        monkeypatch.setattr(config, "GEMINI_API_KEY", "g")
+        monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")
+
+        lines = [
+            'data: {"candidates":[{"content":{"parts":[{"text":"Hello "}]}}]}',
+            'data: {"candidates":[{"content":{"parts":[{"text":"there"}]}}]}',
+        ]
+
+        def fake_stream(method, url, **kwargs):
+            assert "streamGenerateContent" in url
+            return _FakeStream(200, lines)
+
+        monkeypatch.setattr(chat_router.httpx, "stream", fake_stream)
+        r = client.post(
+            "/api/chat/stream",
+            json={"messages": [{"role": "user", "content": "hi"}]},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        assert r.text == "Hello there"
+
+    def test_retries_without_thinking_on_400(self, monkeypatch, auth_headers):
+        monkeypatch.setattr(config, "GEMINI_API_KEY", "g")
+        monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")
+
+        calls = {"n": 0}
+
+        def fake_stream(method, url, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                assert "thinkingConfig" in str(kwargs["json"])
+                return _FakeStream(400, [])
+            return _FakeStream(200, ['data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}'])
+
+        monkeypatch.setattr(chat_router.httpx, "stream", fake_stream)
+        r = client.post(
+            "/api/chat/stream",
+            json={"messages": [{"role": "user", "content": "hi"}]},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        assert r.text == "ok"
+        assert calls["n"] == 2
