@@ -42,7 +42,11 @@ class ChatController extends ChangeNotifier {
     _startTyper();
 
     try {
-      await for (final delta in api.sendChatStream(toSend)) {
+      // Cap the wait between chunks: if the stream connects but stalls (it can
+      // hang without sending anything), time out and use the reliable
+      // non-streaming path below instead of sitting on the dots forever.
+      await for (final delta
+          in api.sendChatStream(toSend).timeout(const Duration(seconds: 12))) {
         _streamFull += delta;
       }
     } on ChatUnavailable {
@@ -50,6 +54,8 @@ class ChatController extends ChangeNotifier {
       unavailable = true;
       _finish();
       return;
+    } on TimeoutException {
+      // Streaming stalled; fall back below.
     } catch (_) {
       // Streaming failed; fall back below.
     }
