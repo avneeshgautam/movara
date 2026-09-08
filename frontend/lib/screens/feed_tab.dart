@@ -1,39 +1,27 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../models/chat_message.dart';
-import '../services/api_service.dart';
+import '../services/chat_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 
 /// Feed tab: the Movara assistant. A simple chat with the backend, which
 /// forwards to Claude. History lives for the session only.
 class FeedTab extends StatefulWidget {
-  const FeedTab({super.key, required this.api});
+  const FeedTab({super.key, required this.controller});
 
-  final ApiService api;
+  final ChatController controller;
 
   @override
   State<FeedTab> createState() => _FeedTabState();
 }
 
 class _FeedTabState extends State<FeedTab> {
-  final _messages = <ChatMessage>[];
+  ChatController get _chat => widget.controller;
+  List<ChatMessage> get _messages => _chat.messages;
   final _input = TextEditingController();
   final _scroll = ScrollController();
-  bool _sending = false;
-  bool _unavailable = false;
-
-  // Typewriter reveal: the stream fills [_streamFull]; a ticker reveals it a
-  // few characters at a time so the reply types out smoothly, no matter how
-  // the network chunks it.
-  Timer? _typer;
-  String _streamFull = '';
-  int _revealed = 0;
-  bool _streamDone = false;
-  int? _assistantIndex;
 
   static const _suggestions = [
     'Suggest a 20-minute workout',
@@ -42,101 +30,33 @@ class _FeedTabState extends State<FeedTab> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _chat.addListener(_onChat);
+    // Jump to the latest message when the chat is reopened.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToEnd());
+  }
+
+  void _onChat() {
+    if (mounted) {
+      setState(() {});
+      _scrollToEnd();
+    }
+  }
+
+  @override
   void dispose() {
-    _typer?.cancel();
+    _chat.removeListener(_onChat);
     _input.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
-  Future<void> _send([String? preset]) async {
+  void _send([String? preset]) {
     final text = (preset ?? _input.text).trim();
-    if (text.isEmpty || _sending) return;
-
-    setState(() {
-      _messages.add(ChatMessage(role: 'user', content: text));
-      _input.clear();
-      _sending = true;
-      _unavailable = false;
-      _streamFull = '';
-      _revealed = 0;
-      _streamDone = false;
-      _assistantIndex = null;
-    });
-    _scrollToEnd();
-
-    final toSend = List<ChatMessage>.of(_messages);
-    _startTyper();
-
-    try {
-      await for (final delta in widget.api.sendChatStream(toSend)) {
-        _streamFull += delta;
-      }
-    } on ChatUnavailable {
-      _typer?.cancel();
-      if (mounted) setState(() => _unavailable = true);
-      _finishStream();
-      return;
-    } catch (_) {
-      // Streaming failed; the non-streaming fallback below will try to recover.
-    }
-
-    // If streaming produced nothing (empty stream, proxy buffering, an error
-    // mid-way), fall back to the plain request, which is the proven path.
-    if (_streamFull.trim().isEmpty) {
-      try {
-        _streamFull = await widget.api.sendChat(toSend);
-      } on ChatUnavailable {
-        _typer?.cancel();
-        if (mounted) setState(() => _unavailable = true);
-        _finishStream();
-        return;
-      } catch (_) {
-        // fall through to the generic message
-      }
-    }
-    if (_streamFull.trim().isEmpty) {
-      _streamFull =
-          "I couldn't reach the assistant just now. Try again in a moment.";
-    }
-    _streamDone = true;
-  }
-
-  /// Reveals a few characters per tick from whatever has streamed in so far.
-  void _startTyper() {
-    _typer?.cancel();
-    _typer = Timer.periodic(const Duration(milliseconds: 16), (t) {
-      if (!mounted) {
-        t.cancel();
-        return;
-      }
-      if (_revealed < _streamFull.length) {
-        // Proportional step: catches up quickly on long replies, eases near
-        // the end -- so it reads as typing, not a dump.
-        final remaining = _streamFull.length - _revealed;
-        _revealed += (remaining ~/ 20).clamp(1, remaining);
-        setState(() {
-          final shown = _streamFull.substring(0, _revealed);
-          if (_assistantIndex == null) {
-            _messages.add(ChatMessage(role: 'assistant', content: shown));
-            _assistantIndex = _messages.length - 1;
-          } else {
-            _messages[_assistantIndex!] =
-                ChatMessage(role: 'assistant', content: shown);
-          }
-        });
-        _scrollToEnd();
-      } else if (_streamDone) {
-        _finishStream();
-      }
-    });
-  }
-
-  void _finishStream() {
-    _typer?.cancel();
-    _typer = null;
-    if (mounted) setState(() => _sending = false);
-    _scrollToEnd();
+    if (text.isEmpty || _chat.sending) return;
+    _input.clear();
+    _chat.send(text);
   }
 
   void _scrollToEnd() {
@@ -159,7 +79,7 @@ class _FeedTabState extends State<FeedTab> {
           Expanded(
             child: _messages.isEmpty ? _intro(context) : _list(context),
           ),
-          if (_unavailable) _unavailableNote(context),
+          if (_chat.unavailable) _unavailableNote(context),
           _composer(context),
         ],
       ),
@@ -168,7 +88,7 @@ class _FeedTabState extends State<FeedTab> {
 
   Widget _list(BuildContext context) {
     final awaitingFirst =
-        _sending && (_messages.isEmpty || _messages.last.isUser);
+        _chat.sending && (_messages.isEmpty || _messages.last.isUser);
     return ListView.builder(
       controller: _scroll,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -362,17 +282,17 @@ class _FeedTabState extends State<FeedTab> {
             ),
             const SizedBox(width: 8),
             GestureDetector(
-              onTap: _sending ? null : () => _send(),
+              onTap: _chat.sending ? null : () => _send(),
               child: Container(
                 width: 44,
                 height: 44,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: _sending ? c.surface3 : c.accent,
+                  color: _chat.sending ? c.surface3 : c.accent,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(Icons.arrow_upward,
-                    color: _sending ? c.textMuted : Colors.white, size: 20),
+                    color: _chat.sending ? c.textMuted : Colors.white, size: 20),
               ),
             ),
           ],

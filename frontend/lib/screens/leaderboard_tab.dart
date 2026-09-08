@@ -180,10 +180,11 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         children: [
           CircularProgressIndicator(color: c.accent),
           const SizedBox(height: 14),
-          Text('Waking the server…',
-              style: TextStyle(color: c.textMuted, fontSize: 12)),
-          const SizedBox(height: 2),
-          Text('The free server sleeps when idle; this takes a few seconds.',
+          Text('Connecting to server…',
+              style: AppTheme.display(color: c.textPrimary, fontSize: 13)),
+          const SizedBox(height: 4),
+          Text('Waking it up — the free tier sleeps when idle, so this can '
+              'take a few seconds.',
               textAlign: TextAlign.center,
               style: TextStyle(color: c.textMuted, fontSize: 11)),
         ],

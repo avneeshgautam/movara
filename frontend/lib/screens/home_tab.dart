@@ -8,7 +8,7 @@ import '../services/run_store.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 import '../widgets/dashboard_widgets.dart';
-import '../widgets/goal_ring.dart';
+import '../widgets/dual_goal_ring.dart';
 
 /// The overview / dashboard shown on the Home tab: goal ring, streak, weekly
 /// stats and achievements. The actual set logging lives on the Workout tab.
@@ -66,38 +66,7 @@ class HomeTab extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    MovaraCard(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Real: sets logged this week against the user's goal.
-                          GoalRing(
-                            percent: goalStore.weeklySets <= 0
-                                ? 0
-                                : (stats.totalSetsThisWeek /
-                                        goalStore.weeklySets *
-                                        100)
-                                    .clamp(0, 100)
-                                    .round(),
-                            size: 130,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Weekly Goal',
-                            style: AppTheme.display(
-                              color: c.textPrimary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            '${stats.totalSetsThisWeek} / ${goalStore.weeklySets} sets',
-                            style: TextStyle(color: c.textSecondary, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
+                    _goalCard(context, stats, entries),
                     const SizedBox(width: 14),
                     Expanded(child: StreakCard(days: stats.streak)),
                   ],
@@ -150,14 +119,12 @@ class HomeTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
               ],
-              if (stats.totalSetsThisWeek >= goalStore.weeklySets &&
-                  goalStore.weeklySets > 0) ...[
+              if (_goalReached(stats, entries)) ...[
                 AchievementCard(
                   emoji: '🎯',
-                  title: 'Weekly Goal Reached',
-                  description:
-                      '${stats.totalSetsThisWeek} of ${goalStore.weeklySets} sets this week',
-                  date: 'This week',
+                  title: '${goalStore.periodLabel} Goal Reached',
+                  description: 'Both your sets and distance goals are done',
+                  date: goalStore.periodLabel,
                   tint: c.accentSoft,
                 ),
                 const SizedBox(height: 10),
@@ -181,12 +148,95 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  Future<void> _editGoal(BuildContext context) async {
-    final result = await showDialog<int>(
-      context: context,
-      builder: (_) => _GoalDialog(current: goalStore.weeklySets),
+  int _todaySets(List<WorkoutEntry> entries) {
+    final now = DateTime.now();
+    return entries
+        .where((e) =>
+            e.performedAt.year == now.year &&
+            e.performedAt.month == now.month &&
+            e.performedAt.day == now.day)
+        .fold<int>(0, (a, e) => a + e.sets);
+  }
+
+  ({int sets, double km}) _current(WeekStats stats, List<WorkoutEntry> entries) {
+    if (goalStore.period == GoalPeriod.daily) {
+      return (sets: _todaySets(entries), km: runStore.kmToday());
+    }
+    return (sets: stats.totalSetsThisWeek, km: runStore.totalKmThisWeek());
+  }
+
+  bool _goalReached(WeekStats stats, List<WorkoutEntry> entries) {
+    final cur = _current(stats, entries);
+    return goalStore.setsGoal > 0 &&
+        goalStore.kmGoal > 0 &&
+        cur.sets >= goalStore.setsGoal &&
+        cur.km >= goalStore.kmGoal;
+  }
+
+  Widget _goalCard(
+      BuildContext context, WeekStats stats, List<WorkoutEntry> entries) {
+    final c = context.movara;
+    final cur = _current(stats, entries);
+    final setsPct =
+        goalStore.setsGoal <= 0 ? 0.0 : cur.sets / goalStore.setsGoal;
+    final kmPct = goalStore.kmGoal <= 0 ? 0.0 : cur.km / goalStore.kmGoal;
+
+    return MovaraCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          DualGoalRing(
+            outer: setsPct,
+            inner: kmPct,
+            outerColor: c.accent,
+            innerColor: c.blue,
+            centerTop: goalStore.periodLabel,
+            centerBottom: 'goal',
+            size: 118,
+          ),
+          const SizedBox(height: 12),
+          _legend(context, c.accent, 'Sets', '${cur.sets} / ${goalStore.setsGoal}'),
+          const SizedBox(height: 6),
+          _legend(context, c.blue, 'Run',
+              '${cur.km.toStringAsFixed(1)} / ${goalStore.kmGoal.toStringAsFixed(0)} km'),
+        ],
+      ),
     );
-    if (result != null) await goalStore.setWeeklySets(result);
+  }
+
+  Widget _legend(BuildContext context, Color dot, String label, String value) {
+    final c = context.movara;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        Text(label, style: TextStyle(color: c.textSecondary, fontSize: 11)),
+        const SizedBox(width: 4),
+        Text(value,
+            style: AppTheme.display(
+                color: c.textPrimary, fontSize: 11, fontWeight: FontWeight.w700)),
+      ],
+    );
+  }
+
+  Future<void> _editGoal(BuildContext context) async {
+    final result = await showDialog<({GoalPeriod period, int sets, double km})>(
+      context: context,
+      builder: (_) => _GoalDialog(
+        period: goalStore.period,
+        sets: goalStore.setsGoal,
+        km: goalStore.kmGoal,
+      ),
+    );
+    if (result != null) {
+      await goalStore.save(
+          period: result.period, sets: result.sets, km: result.km);
+    }
   }
 
   /// A real running achievement from recorded runs, or null when none exist
@@ -242,9 +292,18 @@ class _WakingBanner extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              'Waking the server… the free tier sleeps when idle.',
-              style: TextStyle(color: c.textSecondary, fontSize: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Connecting to server…',
+                    style: AppTheme.display(
+                        color: c.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 1),
+                Text('Waking it up — the free tier sleeps when idle.',
+                    style: TextStyle(color: c.textSecondary, fontSize: 11)),
+              ],
             ),
           ),
         ],
@@ -347,30 +406,36 @@ class WeekStats {
   }
 }
 
-/// Sets the weekly sets goal: a few presets plus a typed value.
+/// Sets the goal: a Daily/Weekly period plus sets and distance targets.
 class _GoalDialog extends StatefulWidget {
-  const _GoalDialog({required this.current});
+  const _GoalDialog({required this.period, required this.sets, required this.km});
 
-  final int current;
+  final GoalPeriod period;
+  final int sets;
+  final double km;
 
   @override
   State<_GoalDialog> createState() => _GoalDialogState();
 }
 
 class _GoalDialogState extends State<_GoalDialog> {
-  static const _presets = [20, 30, 40, 60];
-  late final TextEditingController _field =
-      TextEditingController(text: '${widget.current}');
+  late GoalPeriod _period = widget.period;
+  late final TextEditingController _sets =
+      TextEditingController(text: '${widget.sets}');
+  late final TextEditingController _km =
+      TextEditingController(text: widget.km.toStringAsFixed(0));
 
   @override
   void dispose() {
-    _field.dispose();
+    _sets.dispose();
+    _km.dispose();
     super.dispose();
   }
 
   void _save() {
-    final n = int.tryParse(_field.text.trim()) ?? widget.current;
-    Navigator.pop(context, n);
+    final sets = int.tryParse(_sets.text.trim()) ?? widget.sets;
+    final km = double.tryParse(_km.text.trim()) ?? widget.km;
+    Navigator.pop(context, (period: _period, sets: sets, km: km));
   }
 
   @override
@@ -379,56 +444,31 @@ class _GoalDialogState extends State<_GoalDialog> {
     return AlertDialog(
       backgroundColor: c.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text('Weekly goal',
+      title: Text('Your goal',
           style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('How many sets do you want to log each week?',
-              style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.4)),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final p in _presets)
-                GestureDetector(
-                  onTap: () => setState(() => _field.text = '$p'),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _field.text == '$p' ? c.accent : c.surface2,
-                      border: Border.all(
-                          color: _field.text == '$p' ? c.accent : c.border),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text('$p',
-                        style: AppTheme.display(
-                            color: _field.text == '$p'
-                                ? Colors.white
-                                : c.textSecondary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700)),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _field,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            style: TextStyle(color: c.textPrimary),
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              labelText: 'Sets per week',
-              labelStyle: TextStyle(color: c.textMuted),
-              focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: c.accent)),
+          // Period toggle.
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: c.surface2,
+              border: Border.all(color: c.border),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                _periodSeg('Daily', GoalPeriod.daily),
+                _periodSeg('Weekly', GoalPeriod.weekly),
+              ],
             ),
           ),
+          const SizedBox(height: 16),
+          _numberField(c, _sets, 'Workout sets', false),
+          const SizedBox(height: 12),
+          _numberField(c, _km, 'Running distance (km)', true),
         ],
       ),
       actions: [
@@ -442,6 +482,51 @@ class _GoalDialogState extends State<_GoalDialog> {
           child: const Text('Save'),
         ),
       ],
+    );
+  }
+
+  Widget _periodSeg(String label, GoalPeriod p) {
+    final c = context.movara;
+    final selected = _period == p;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _period = p),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? c.accent : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Text(label,
+              style: AppTheme.display(
+                  color: selected ? Colors.white : c.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700)),
+        ),
+      ),
+    );
+  }
+
+  Widget _numberField(
+      MovaraColors c, TextEditingController ctrl, String label, bool decimal) {
+    return TextField(
+      controller: ctrl,
+      keyboardType:
+          TextInputType.numberWithOptions(decimal: decimal),
+      inputFormatters: [
+        decimal
+            ? FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+            : FilteringTextInputFormatter.digitsOnly,
+      ],
+      style: TextStyle(color: c.textPrimary),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: c.textMuted),
+        focusedBorder:
+            UnderlineInputBorder(borderSide: BorderSide(color: c.accent)),
+      ),
     );
   }
 }

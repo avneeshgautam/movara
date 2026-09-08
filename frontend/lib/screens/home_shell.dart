@@ -4,6 +4,7 @@ import '../models/workout_entry.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/reminder_scheduler.dart';
+import '../services/chat_controller.dart';
 import '../services/goal_store.dart';
 import '../services/run_store.dart';
 import '../models/run_record.dart' show formatDuration;
@@ -44,6 +45,7 @@ class _HomeShellState extends State<HomeShell> {
   final _reminders = ReminderScheduler();
   final _workoutTimer = WorkoutTimer();
   final _goals = GoalStore();
+  late final ChatController _chat = ChatController(api: _api);
   late final RunStore _runs = RunStore(uploader: _api.uploadRun);
   int _index = 0;
 
@@ -70,6 +72,7 @@ class _HomeShellState extends State<HomeShell> {
     _runs.dispose();
     _workoutTimer.dispose();
     _goals.dispose();
+    _chat.dispose();
     _api.dispose();
     super.dispose();
   }
@@ -131,7 +134,7 @@ class _HomeShellState extends State<HomeShell> {
                 style: AppTheme.display(
                     color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
           ),
-          body: FeedTab(api: _api),
+          body: FeedTab(controller: _chat),
         );
       },
     ));

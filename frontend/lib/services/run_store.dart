@@ -88,6 +88,14 @@ class RunStore extends ChangeNotifier {
   double totalKmThisWeek({DateTime? now}) =>
       kmByWeekday(now: now).fold(0, (a, b) => a + b);
 
+  /// Kilometres run today.
+  double kmToday({DateTime? now}) {
+    final today = _startOfDay(now ?? DateTime.now());
+    return _runs
+        .where((r) => _startOfDay(r.startedAt) == today)
+        .fold<double>(0, (a, r) => a + r.distanceKm);
+  }
+
   Iterable<RunRecord> _thisWeek({DateTime? now}) {
     final today = _startOfDay(now ?? DateTime.now());
     final monday = today.subtract(Duration(days: today.weekday - 1));
