@@ -128,9 +128,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('BODY STATS'), findsOneWidget);
-      expect(find.text('DAILY GOALS'), findsOneWidget);
-      expect(find.text('BADGES'), findsOneWidget);
-      // BMI computed from the default weight/height (74.5kg, 178cm).
+      expect(find.text('SETTINGS'), findsOneWidget);
+      expect(find.text('LEADERBOARD NAME'), findsOneWidget);
+      // Working menu actions are present.
+      expect(find.text('Water reminders'), findsOneWidget);
+      expect(find.text('Sign out'), findsOneWidget);
+      // BMI computed from the default weight/height is Normal.
       expect(find.text('Normal'), findsOneWidget);
     });
 

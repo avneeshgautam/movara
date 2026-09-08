@@ -179,6 +179,7 @@ class _HomeShellState extends State<HomeShell> {
                   email: widget.auth.currentUser?.email,
                   photoUrl: widget.auth.currentUser?.photoURL,
                   onSignOut: widget.auth.signOut,
+                  onOpenTab: _onTab,
                 ),
               ],
             ),

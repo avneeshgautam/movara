@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
-
-import '../services/api_service.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/workout_entry.dart';
+import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 
-/// Profile / account screen, ported from the React `AccountPage` design.
+/// Profile / account screen.
 ///
-/// Workout counts and personal records are derived from real logged entries.
-/// Body stats, goals, badges and the settings menu are still local/placeholder
-/// state — there is no data source for them yet (see the TODOs).
+/// Workout counts and personal records come from real logged entries. Body
+/// stats are editable and persisted on the device. The leaderboard username
+/// and the settings menu (reminders, goal, privacy, about, sign out) are all
+/// wired to real actions.
 class AccountTab extends StatefulWidget {
   const AccountTab({
     super.key,
     required this.api,
     required this.entriesFuture,
+    this.onOpenTab,
     this.displayName = 'Athlete',
     this.email,
     this.photoUrl,
@@ -29,6 +31,9 @@ class AccountTab extends StatefulWidget {
   final String? email;
   final String? photoUrl;
   final Future<void> Function()? onSignOut;
+
+  /// Switches the shell to another bottom tab (0=Home,1=Workout,3=Reminders).
+  final void Function(int index)? onOpenTab;
 
   @override
   State<AccountTab> createState() => _AccountTabState();
@@ -46,6 +51,18 @@ class _AccountTabState extends State<AccountTab> {
   void initState() {
     super.initState();
     _loadUsername();
+    _loadBody();
+  }
+
+  Future<void> _loadBody() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      for (final key in _body.keys.toList()) {
+        final v = prefs.getDouble('body_$key');
+        if (v != null) _body[key] = v;
+      }
+    });
   }
 
   @override
@@ -90,16 +107,9 @@ class _AccountTabState extends State<AccountTab> {
 
   // Local-only for now; nothing persists these yet.
   final Map<String, double> _body = {
-    'Weight': 74.5,
-    'Height': 178,
-    'Body Fat': 16,
-    'Muscle Mass': 58.2,
-    'Resting HR': 62,
-  };
-
-  final Map<String, bool> _toggles = {
-    'Notifications': true,
-    'Sleep Tracking': false,
+    'Weight': 70,
+    'Height': 170,
+    'Body Fat': 18,
   };
 
   double get _bmi {
@@ -143,14 +153,8 @@ class _AccountTabState extends State<AccountTab> {
                     _title('Body Stats'),
                     _bodyStats(context),
                     const SizedBox(height: 22),
-                    _title('Daily Goals'),
-                    _goals(context),
-                    const SizedBox(height: 22),
                     _title('Personal Records 🏆'),
                     _records(context, summary.records),
-                    const SizedBox(height: 22),
-                    _title('Badges'),
-                    _badges(context),
                     const SizedBox(height: 22),
                     ..._menu(context),
                     const SizedBox(height: 8),
@@ -311,22 +315,6 @@ class _AccountTabState extends State<AccountTab> {
                               ),
                             ),
                     ),
-                    Positioned(
-                      right: -2,
-                      bottom: -2,
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: c.accent,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: c.bg, width: 2),
-                        ),
-                        child: const Icon(Icons.edit,
-                            size: 11, color: Colors.white),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -380,9 +368,9 @@ class _AccountTabState extends State<AccountTab> {
               _quickStat(context, '📅', '${s.thisMonthDays}', 'This Month'),
               const SizedBox(width: 8),
               // TODO: no duration/calorie source yet.
-              _quickStat(context, '⏱️', '94', 'Total Time'),
+              _quickStat(context, '📈', '${s.totalSets}', 'Total Sets'),
               const SizedBox(width: 8),
-              _quickStat(context, '🔥', '52k', 'Calories'),
+              _quickStat(context, '🏅', '${s.prCount}', 'PRs'),
             ],
           ),
         ],
@@ -464,8 +452,6 @@ class _AccountTabState extends State<AccountTab> {
       (label: 'Height', unit: 'cm', editable: true),
       (label: 'BMI', unit: '', editable: false),
       (label: 'Body Fat', unit: '%', editable: true),
-      (label: 'Muscle Mass', unit: 'kg', editable: false),
-      (label: 'Resting HR', unit: 'bpm', editable: false),
     ];
 
     for (var i = 0; i < specs.length; i++) {
@@ -584,89 +570,11 @@ class _AccountTabState extends State<AccountTab> {
     );
     if (result != null && result > 0) {
       setState(() => _body[label] = result);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('body_$label', result);
     }
   }
 
-  Widget _goals(BuildContext context) {
-    final c = context.movara;
-    // TODO: placeholder targets until goals are stored server-side.
-    final goals = <({String label, double current, double target, String unit, Color color})>[
-      (label: 'Daily Steps', current: 7200, target: 10000, unit: 'steps', color: c.accent),
-      (label: 'Weekly Workouts', current: 4, target: 5, unit: 'sessions', color: c.green),
-      (label: 'Water Intake', current: 1.8, target: 2.5, unit: 'L', color: c.blue),
-      (label: 'Sleep', current: 6.5, target: 8, unit: 'hrs', color: const Color(0xFFA78BFA)),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.surface,
-        border: Border.all(color: c.border),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        children: [
-          for (var i = 0; i < goals.length; i++) ...[
-            if (i > 0) const SizedBox(height: 16),
-            _goalBar(context, goals[i]),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _goalBar(
-    BuildContext context,
-    ({String label, double current, double target, String unit, Color color}) g,
-  ) {
-    final c = context.movara;
-    final pct = (g.current / g.target).clamp(0.0, 1.0);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              g.label,
-              style: AppTheme.display(
-                color: c.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            RichText(
-              text: TextSpan(
-                text: _fmt(g.current),
-                style: TextStyle(
-                    color: g.color, fontSize: 12, fontWeight: FontWeight.w700),
-                children: [
-                  TextSpan(
-                    text: ' / ${_fmt(g.target)} ${g.unit}',
-                    style: TextStyle(
-                        color: c.textMuted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(999),
-          child: LinearProgressIndicator(
-            value: pct,
-            minHeight: 8,
-            backgroundColor: c.surface3,
-            valueColor: AlwaysStoppedAnimation(g.color),
-          ),
-        ),
-      ],
-    );
-  }
 
   Widget _records(BuildContext context, List<_Record> records) {
     final c = context.movara;
@@ -747,118 +655,34 @@ class _AccountTabState extends State<AccountTab> {
     );
   }
 
-  Widget _badges(BuildContext context) {
-    final c = context.movara;
-    // TODO: earned flags are placeholders until achievements are tracked.
-    const badges = <({String icon, String label, bool earned})>[
-      (icon: '🏅', label: '10K Steps', earned: true),
-      (icon: '🔥', label: '7-Day Streak', earned: true),
-      (icon: '💪', label: '100kg Bench', earned: true),
-      (icon: '🏃', label: '5K Runner', earned: true),
-      (icon: '⚡', label: '30-Day Warrior', earned: false),
-      (icon: '🥇', label: 'Elite Lifter', earned: false),
-    ];
-
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: 1.15,
-      children: [
-        for (final b in badges)
-          Opacity(
-            opacity: b.earned ? 1 : 0.45,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-              decoration: BoxDecoration(
-                color: b.earned ? c.surface : c.surface2,
-                border: Border.all(color: b.earned ? c.accent : c.border),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(b.icon, style: const TextStyle(fontSize: 22)),
-                  const SizedBox(height: 6),
-                  Text(
-                    b.label,
-                    textAlign: TextAlign.center,
-                    style: AppTheme.display(
-                      color: b.earned ? c.textPrimary : c.textMuted,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      height: 1.15,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
 
   List<Widget> _menu(BuildContext context) {
-    final sections = <({String title, List<_MenuItem> items})>[
-      (
-        title: 'Preferences',
-        items: [
-          _MenuItem('🎯', 'Edit Goals', arrow: true),
-          _MenuItem('📊', 'Progress History', arrow: true),
-          _MenuItem('🔔', 'Notifications', toggle: true),
-          _MenuItem('📏', 'Units (Metric)', arrow: true),
-        ],
-      ),
-      (
-        title: 'Health',
-        items: [
-          _MenuItem('❤️', 'Heart Rate Zones', arrow: true),
-          _MenuItem('🩺', 'Health Metrics', arrow: true),
-          _MenuItem('😴', 'Sleep Tracking', toggle: true),
-        ],
-      ),
-      (
-        title: 'Account',
-        items: [
-          _MenuItem('🔒', 'Privacy', arrow: true),
-          _MenuItem('🔗', 'Connected Apps', arrow: true),
-          _MenuItem('🚪', 'Sign Out', danger: true),
-        ],
-      ),
+    final items = <_MenuAction>[
+      _MenuAction('🎯', 'Edit weekly goal', () => widget.onOpenTab?.call(0)),
+      _MenuAction('💧', 'Water reminders', () => widget.onOpenTab?.call(3)),
+      _MenuAction('🔒', 'Privacy & data', () => _showPrivacy(context)),
+      _MenuAction('ℹ️', 'About Movara', () => _showAbout(context)),
+      _MenuAction('🚪', 'Sign out', () => widget.onSignOut?.call(),
+          danger: true),
     ];
-
-    final widgets = <Widget>[];
-    for (final section in sections) {
-      widgets.add(_title(section.title));
-      widgets.add(_panel(
-        context,
-        [
-          for (var i = 0; i < section.items.length; i++)
-            _menuRow(context, section.items[i], divider: i > 0),
-        ],
-      ));
-      widgets.add(const SizedBox(height: 22));
-    }
-    return widgets;
+    return [
+      _title('Settings'),
+      _panel(context, [
+        for (var i = 0; i < items.length; i++)
+          _menuRow(context, items[i], divider: i > 0),
+      ]),
+      const SizedBox(height: 22),
+    ];
   }
 
-  Widget _menuRow(BuildContext context, _MenuItem item, {required bool divider}) {
+  Widget _menuRow(BuildContext context, _MenuAction item, {required bool divider}) {
     final c = context.movara;
     return Container(
       decoration: divider
-          ? BoxDecoration(
-              border: Border(top: BorderSide(color: c.border)),
-            )
+          ? BoxDecoration(border: Border(top: BorderSide(color: c.border)))
           : null,
       child: InkWell(
-        // TODO: wire these up as the corresponding screens are built.
-        onTap: item.toggle
-            ? null
-            : item.label == 'Sign Out'
-                ? () => widget.onSignOut?.call()
-                : () {},
+        onTap: item.onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
@@ -871,20 +695,15 @@ class _AccountTabState extends State<AccountTab> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  item.label,
-                  style: TextStyle(
-                    color: item.danger ? const Color(0xFFEF4444) : c.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                child: Text(item.label,
+                    style: TextStyle(
+                      color:
+                          item.danger ? const Color(0xFFEF4444) : c.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    )),
               ),
-              if (item.toggle)
-                _switch(context, _toggles[item.label] ?? false,
-                    () => setState(() => _toggles[item.label] =
-                        !(_toggles[item.label] ?? false)))
-              else if (item.arrow)
+              if (!item.danger)
                 Icon(Icons.chevron_right, size: 18, color: c.textMuted),
             ],
           ),
@@ -893,36 +712,51 @@ class _AccountTabState extends State<AccountTab> {
     );
   }
 
-  Widget _switch(BuildContext context, bool on, VoidCallback onTap) {
+  Future<void> _showPrivacy(BuildContext context) async {
     final c = context.movara;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        width: 40,
-        height: 22,
-        decoration: BoxDecoration(
-          color: on ? c.accent : c.surface3,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: on ? c.accent : c.border, width: 1.5),
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Privacy & data',
+            style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+        content: Text(
+          'Your workouts and runs are tied to your account and only you can '
+          'see your own data. On the leaderboard, others see only your chosen '
+          'username (or first name) and your weekly totals — never your '
+          'individual entries. Body stats stay on this device. Sign-in is '
+          'handled by Google; Movara never sees your password.',
+          style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.5),
         ),
-        child: Stack(
-          children: [
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 160),
-              left: on ? 19 : 1,
-              top: 1,
-              child: Container(
-                width: 16,
-                height: 16,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-          ],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Got it', style: TextStyle(color: c.accent))),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showAbout(BuildContext context) async {
+    final c = context.movara;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Movara',
+            style: AppTheme.display(color: c.accent, fontSize: 20)),
+        content: Text(
+          'Movara v1.0.0\n\nTrack workouts and runs, share your route, and '
+          'stay on the leaderboard. Built with 🔥.',
+          style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.5),
         ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Close', style: TextStyle(color: c.accent))),
+        ],
       ),
     );
   }
@@ -931,14 +765,11 @@ class _AccountTabState extends State<AccountTab> {
 String _fmt(double v) =>
     v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
-class _MenuItem {
-  _MenuItem(this.icon, this.label,
-      {this.arrow = false, this.toggle = false, this.danger = false});
-
+class _MenuAction {
+  _MenuAction(this.icon, this.label, this.onTap, {this.danger = false});
   final String icon;
   final String label;
-  final bool arrow;
-  final bool toggle;
+  final VoidCallback onTap;
   final bool danger;
 }
 
@@ -954,6 +785,8 @@ class _Summary {
   const _Summary({
     required this.workoutDays,
     required this.thisMonthDays,
+    required this.totalSets,
+    required this.prCount,
     required this.records,
   });
 
@@ -963,6 +796,10 @@ class _Summary {
   /// Distinct days logged in the current calendar month.
   final int thisMonthDays;
 
+  /// Every set ever logged, and how many exercises have a weight PR.
+  final int totalSets;
+  final int prCount;
+
   /// Heaviest logged set per exercise, best first.
   final List<_Record> records;
 
@@ -970,11 +807,13 @@ class _Summary {
     final now = DateTime.now();
     final days = <DateTime>{};
     final best = <String, WorkoutEntry>{};
+    var totalSets = 0;
 
     for (final e in entries) {
       final d = DateTime(
           e.performedAt.year, e.performedAt.month, e.performedAt.day);
       days.add(d);
+      totalSets += e.sets;
 
       final weight = e.weightKg;
       if (weight == null || weight <= 0) continue;
@@ -992,6 +831,8 @@ class _Summary {
       thisMonthDays: days
           .where((d) => d.year == now.year && d.month == now.month)
           .length,
+      totalSets: totalSets,
+      prCount: best.length,
       records: ranked
           .take(4)
           .map((e) => _Record(
