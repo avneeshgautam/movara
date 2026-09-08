@@ -41,36 +41,19 @@ class ChatController extends ChangeNotifier {
     final toSend = List<ChatMessage>.of(messages);
     _startTyper();
 
+    // Use the plain request, not streaming: streaming stalled on some replies
+    // (the connection stayed open sending nothing), leaving the chat stuck on
+    // the dots. This is reliable, and the typewriter still types the answer
+    // out. sendChat retries a cold start on its own.
     try {
-      // Cap the wait between chunks: if the stream connects but stalls (it can
-      // hang without sending anything), time out and use the reliable
-      // non-streaming path below instead of sitting on the dots forever.
-      await for (final delta
-          in api.sendChatStream(toSend).timeout(const Duration(seconds: 12))) {
-        _streamFull += delta;
-      }
+      _streamFull = await api.sendChat(toSend);
     } on ChatUnavailable {
       _typer?.cancel();
       unavailable = true;
       _finish();
       return;
-    } on TimeoutException {
-      // Streaming stalled; fall back below.
     } catch (_) {
-      // Streaming failed; fall back below.
-    }
-
-    if (_streamFull.trim().isEmpty) {
-      try {
-        _streamFull = await api.sendChat(toSend);
-      } on ChatUnavailable {
-        _typer?.cancel();
-        unavailable = true;
-        _finish();
-        return;
-      } catch (_) {
-        // fall through
-      }
+      // fall through to the generic message
     }
     if (_streamFull.trim().isEmpty) {
       _streamFull =
