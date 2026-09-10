@@ -111,10 +111,11 @@ void main() {
 
       expect(find.text('Bench Press'), findsOneWidget);
 
-      await tester.tap(find.text('Legs'));
+      // Bicep is near the start of the (now scrollable) category bar.
+      await tester.tap(find.text('Bicep'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Barbell Squat'), findsOneWidget);
+      expect(find.text('Barbell Curl'), findsOneWidget);
       expect(find.text('Bench Press'), findsNothing);
     });
   });
