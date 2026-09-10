@@ -10,9 +10,10 @@ import '../theme/movara_colors.dart';
 /// Profile / account screen.
 ///
 /// Workout counts and personal records come from real logged entries. Body
-/// stats are editable and persisted on the device. The leaderboard username
-/// and the settings menu (reminders, goal, privacy, about, sign out) are all
-/// wired to real actions.
+/// stats and toggles are editable and persisted on the device. Menu rows that
+/// map to a real feature act on it (Edit Goals, Water Reminders, Privacy,
+/// About, Sign Out); the rest open a "coming soon" note. Daily Goals and
+/// Badges are still design placeholders until they have a data source.
 class AccountTab extends StatefulWidget {
   const AccountTab({
     super.key,
@@ -52,6 +53,24 @@ class _AccountTabState extends State<AccountTab> {
     super.initState();
     _loadUsername();
     _loadBody();
+    _loadToggles();
+  }
+
+  Future<void> _loadToggles() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      for (final key in _toggles.keys.toList()) {
+        final v = prefs.getBool('toggle_$key');
+        if (v != null) _toggles[key] = v;
+      }
+    });
+  }
+
+  Future<void> _setToggle(String key, bool value) async {
+    setState(() => _toggles[key] = value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('toggle_$key', value);
   }
 
   Future<void> _loadBody() async {
@@ -105,11 +124,18 @@ class _AccountTabState extends State<AccountTab> {
     }
   }
 
-  // Local-only for now; nothing persists these yet.
+  // Persisted per-device (see _loadBody / _editBody).
   final Map<String, double> _body = {
     'Weight': 70,
     'Height': 170,
     'Body Fat': 18,
+    'Muscle Mass': 55,
+    'Resting HR': 62,
+  };
+
+  final Map<String, bool> _toggles = {
+    'Notifications': true,
+    'Sleep Tracking': false,
   };
 
   double get _bmi {
@@ -153,8 +179,14 @@ class _AccountTabState extends State<AccountTab> {
                     _title('Body Stats'),
                     _bodyStats(context),
                     const SizedBox(height: 22),
+                    _title('Daily Goals'),
+                    _goals(context),
+                    const SizedBox(height: 22),
                     _title('Personal Records 🏆'),
                     _records(context, summary.records),
+                    const SizedBox(height: 22),
+                    _title('Badges'),
+                    _badges(context),
                     const SizedBox(height: 22),
                     ..._menu(context),
                     const SizedBox(height: 8),
@@ -452,6 +484,8 @@ class _AccountTabState extends State<AccountTab> {
       (label: 'Height', unit: 'cm', editable: true),
       (label: 'BMI', unit: '', editable: false),
       (label: 'Body Fat', unit: '%', editable: true),
+      (label: 'Muscle Mass', unit: 'kg', editable: true),
+      (label: 'Resting HR', unit: 'bpm', editable: true),
     ];
 
     for (var i = 0; i < specs.length; i++) {
@@ -576,6 +610,114 @@ class _AccountTabState extends State<AccountTab> {
   }
 
 
+  Widget _goals(BuildContext context) {
+    final c = context.movara;
+    final goals =
+        <({String label, double current, double target, String unit, Color color})>[
+      (label: 'Daily Steps', current: 7200, target: 10000, unit: 'steps', color: c.accent),
+      (label: 'Weekly Workouts', current: 4, target: 5, unit: 'sessions', color: c.green),
+      (label: 'Water Intake', current: 1.8, target: 2.5, unit: 'L', color: c.blue),
+      (label: 'Sleep', current: 6.5, target: 8, unit: 'hrs', color: const Color(0xFFA78BFA)),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < goals.length; i++) ...[
+            if (i > 0) const SizedBox(height: 14),
+            _goalBar(context, goals[i].label, goals[i].current, goals[i].target,
+                goals[i].unit, goals[i].color),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _goalBar(BuildContext context, String label, double current,
+      double target, String unit, Color color) {
+    final c = context.movara;
+    final pct = target <= 0 ? 0.0 : (current / target).clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: TextStyle(color: c.textSecondary, fontSize: 13)),
+            Text('${_fmt(current)} / ${_fmt(target)} $unit',
+                style: AppTheme.display(
+                    color: c.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: pct,
+            minHeight: 6,
+            backgroundColor: c.surface3,
+            valueColor: AlwaysStoppedAnimation(color),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _badges(BuildContext context) {
+    final c = context.movara;
+    const badges = <({String icon, String label, bool earned})>[
+      (icon: '🏅', label: '10K Steps', earned: true),
+      (icon: '🔥', label: '7-Day Streak', earned: true),
+      (icon: '💪', label: '100kg Bench', earned: true),
+      (icon: '🏃', label: '5K Runner', earned: true),
+      (icon: '⚡', label: '30-Day Warrior', earned: false),
+      (icon: '🥇', label: 'Elite Lifter', earned: false),
+    ];
+    return GridView.count(
+      crossAxisCount: 3,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      childAspectRatio: 0.92,
+      children: [
+        for (final b in badges)
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: b.earned ? c.surface : c.surface2,
+              border: Border.all(
+                  color: b.earned ? c.accent.withValues(alpha: 0.4) : c.border),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Opacity(
+                    opacity: b.earned ? 1 : 0.35,
+                    child: Text(b.icon, style: const TextStyle(fontSize: 24))),
+                const SizedBox(height: 6),
+                Text(b.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    style: TextStyle(
+                        color: b.earned ? c.textPrimary : c.textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _records(BuildContext context, List<_Record> records) {
     final c = context.movara;
 
@@ -657,32 +799,68 @@ class _AccountTabState extends State<AccountTab> {
 
 
   List<Widget> _menu(BuildContext context) {
-    final items = <_MenuAction>[
-      _MenuAction('🎯', 'Edit weekly goal', () => widget.onOpenTab?.call(0)),
-      _MenuAction('💧', 'Water reminders', () => widget.onOpenTab?.call(3)),
-      _MenuAction('🔒', 'Privacy & data', () => _showPrivacy(context)),
-      _MenuAction('ℹ️', 'About Movara', () => _showAbout(context)),
-      _MenuAction('🚪', 'Sign out', () => widget.onSignOut?.call(),
-          danger: true),
+    final sections = <({String title, List<_MenuAction> items})>[
+      (
+        title: 'Preferences',
+        items: [
+          _MenuAction('🎯', 'Edit Goals', onTap: () => widget.onOpenTab?.call(0)),
+          _MenuAction('📊', 'Progress History',
+              onTap: () => widget.onOpenTab?.call(1)),
+          _MenuAction('🔔', 'Notifications', toggleKey: 'Notifications'),
+          _MenuAction('📏', 'Units (Metric)',
+              onTap: () => _comingSoon(context, 'Imperial units')),
+        ],
+      ),
+      (
+        title: 'Health',
+        items: [
+          _MenuAction('❤️', 'Heart Rate Zones',
+              onTap: () => _comingSoon(context, 'Heart rate zones')),
+          _MenuAction('🩺', 'Health Metrics',
+              onTap: () => _comingSoon(context, 'Health metrics')),
+          _MenuAction('😴', 'Sleep Tracking', toggleKey: 'Sleep Tracking'),
+        ],
+      ),
+      (
+        title: 'Account',
+        items: [
+          _MenuAction('💧', 'Water Reminders',
+              onTap: () => widget.onOpenTab?.call(3)),
+          _MenuAction('🔒', 'Privacy', onTap: () => _showPrivacy(context)),
+          _MenuAction('🔗', 'Connected Apps',
+              onTap: () => _comingSoon(context, 'Connected apps')),
+          _MenuAction('ℹ️', 'About Movara', onTap: () => _showAbout(context)),
+          _MenuAction('🚪', 'Sign Out',
+              onTap: () => widget.onSignOut?.call(), danger: true),
+        ],
+      ),
     ];
-    return [
-      _title('Settings'),
-      _panel(context, [
-        for (var i = 0; i < items.length; i++)
-          _menuRow(context, items[i], divider: i > 0),
-      ]),
-      const SizedBox(height: 22),
-    ];
+
+    final widgets = <Widget>[];
+    for (final section in sections) {
+      widgets.add(_title(section.title));
+      widgets.add(_panel(context, [
+        for (var i = 0; i < section.items.length; i++)
+          _menuRow(context, section.items[i], divider: i > 0),
+      ]));
+      widgets.add(const SizedBox(height: 22));
+    }
+    return widgets;
   }
 
-  Widget _menuRow(BuildContext context, _MenuAction item, {required bool divider}) {
+  Widget _menuRow(BuildContext context, _MenuAction item,
+      {required bool divider}) {
     final c = context.movara;
+    final key = item.toggleKey;
+    final isToggle = key != null;
     return Container(
       decoration: divider
           ? BoxDecoration(border: Border(top: BorderSide(color: c.border)))
           : null,
       child: InkWell(
-        onTap: item.onTap,
+        onTap: isToggle
+            ? () => _setToggle(key, !(_toggles[key] ?? false))
+            : item.onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
@@ -703,11 +881,69 @@ class _AccountTabState extends State<AccountTab> {
                       fontWeight: FontWeight.w500,
                     )),
               ),
-              if (!item.danger)
+              if (isToggle)
+                _switch(context, _toggles[key] ?? false,
+                    () => _setToggle(key, !(_toggles[key] ?? false)))
+              else if (!item.danger)
                 Icon(Icons.chevron_right, size: 18, color: c.textMuted),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _switch(BuildContext context, bool on, VoidCallback onTap) {
+    final c = context.movara;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        width: 44,
+        height: 24,
+        decoration: BoxDecoration(
+          color: on ? c.accent : c.surface3,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: on ? c.accent : c.border, width: 1.5),
+        ),
+        child: Stack(
+          children: [
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 160),
+              left: on ? 21 : 1,
+              top: 1,
+              child: Container(
+                width: 18,
+                height: 18,
+                decoration: const BoxDecoration(
+                    color: Colors.white, shape: BoxShape.circle),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _comingSoon(BuildContext context, String feature) async {
+    final c = context.movara;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(feature,
+            style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+        content: Text(
+          '$feature is on the roadmap and not available yet. It will show up '
+          'here once it is built.',
+          style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK', style: TextStyle(color: c.accent))),
+        ],
       ),
     );
   }
@@ -766,11 +1002,13 @@ String _fmt(double v) =>
     v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
 class _MenuAction {
-  _MenuAction(this.icon, this.label, this.onTap, {this.danger = false});
+  _MenuAction(this.icon, this.label,
+      {this.onTap, this.danger = false, this.toggleKey});
   final String icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool danger;
+  final String? toggleKey;
 }
 
 class _Record {
