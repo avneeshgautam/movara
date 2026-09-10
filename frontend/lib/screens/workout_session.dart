@@ -141,12 +141,15 @@ class _WorkoutSessionState extends State<WorkoutSession> {
             ),
           ),
 
+          // A fixed gap so the scrolling list never merges into the tabs.
+          const SizedBox(height: 12),
+
           // Exercise list.
           Expanded(
             child: exercises.isEmpty
                 ? _EmptyCategory(category: _active)
                 : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 120),
                     itemCount: exercises.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 16),
                     itemBuilder: (context, i) => _ExerciseCard(
