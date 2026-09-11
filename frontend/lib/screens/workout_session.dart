@@ -1,9 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/workout_entry.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
-import 'exercise_figure.dart';
 
 /// Category-based workout session screen, ported from the React `WorkoutPage`
 /// design: horizontal category tabs, exercise cards with per-set reps/weight
@@ -419,6 +420,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                     exercise: ex,
                     size: 46,
                     radius: 12,
+                    iconSize: 22,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -955,16 +957,18 @@ class _ExerciseThumb extends StatelessWidget {
     required this.exercise,
     required this.size,
     required this.radius,
+    required this.iconSize,
   });
 
   final _Exercise exercise;
   final double size;
   final double radius;
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
     final c = context.movara;
-    return Container(
+    final fallback = Container(
       width: size,
       height: size,
       alignment: Alignment.center,
@@ -972,40 +976,103 @@ class _ExerciseThumb extends StatelessWidget {
         color: c.accentSoft,
         borderRadius: BorderRadius.circular(radius),
       ),
-      child: ExerciseFigure(
-        exerciseId: exercise.id,
-        size: size * 0.82,
-        color: c.accent,
+      child: Icon(exercise.icon, color: c.accent, size: iconSize),
+    );
+
+    if (exercise.images.isEmpty) return fallback;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: Image.network(
+        exercise.images.first,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        // Free-exercise-db photos sit on a white background; wrap them so
+        // they don't look out of place on the dark cards.
+        color: Colors.white,
+        colorBlendMode: BlendMode.dstOver,
+        errorBuilder: (_, __, ___) => fallback,
+        loadingBuilder: (_, child, progress) =>
+            progress == null ? child : fallback,
       ),
     );
   }
 }
 
-/// Demo figure that animates the exercise's line-art avatar back and forth
-/// through the rep, so the movement reads as animated.
-class _DemoFigure extends StatelessWidget {
+/// Demo figure that cross-fades between the exercise's start and end frame
+/// on a repeating timer so the movement reads as animated.
+class _DemoFigure extends StatefulWidget {
   const _DemoFigure({required this.exercise});
 
   final _Exercise exercise;
 
   @override
+  State<_DemoFigure> createState() => _DemoFigureState();
+}
+
+class _DemoFigureState extends State<_DemoFigure> {
+  int _frame = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.exercise.images.length > 1) {
+      _timer = Timer.periodic(const Duration(milliseconds: 900), (_) {
+        if (mounted) {
+          setState(() => _frame = _frame == 0 ? 1 : 0);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = context.movara;
+    final images = widget.exercise.images;
+
+    final fallback = Icon(
+      widget.exercise.icon,
+      size: 56,
+      color: c.accent.withValues(alpha: 0.85),
+    );
+
+    Widget content;
+    if (images.isEmpty) {
+      content = Center(child: fallback);
+    } else {
+      content = AnimatedSwitcher(
+        duration: const Duration(milliseconds: 350),
+        child: Image.network(
+          images[_frame.clamp(0, images.length - 1)],
+          key: ValueKey(_frame),
+          fit: BoxFit.contain,
+          color: Colors.white,
+          colorBlendMode: BlendMode.dstOver,
+          errorBuilder: (_, __, ___) => Center(child: fallback),
+          loadingBuilder: (_, child, progress) =>
+              progress == null ? child : Center(child: fallback),
+        ),
+      );
+    }
+
     return Container(
       height: 160,
       width: double.infinity,
-      alignment: Alignment.center,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: c.surface2,
         border: Border.all(color: c.border),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: AnimatedExerciseFigure(
-        exerciseId: exercise.id,
-        size: 130,
-        color: c.accent,
-      ),
+      child: content,
     );
   }
 }
@@ -1020,6 +1087,7 @@ class _Exercise {
     required this.sets,
     required this.steps,
     required this.icon,
+    this.images = const [],
   });
 
   final String id;
@@ -1028,6 +1096,10 @@ class _Exercise {
   final List<_SetSpec> sets;
   final List<String> steps;
   final IconData icon;
+
+  /// Real exercise photos (start → end frame) from the public-domain
+  /// free-exercise-db. Empty falls back to [icon].
+  final List<String> images;
 }
 
 class _SetSpec {
@@ -1048,6 +1120,7 @@ const _workoutData = <String, List<_Exercise>>{
   'Chest': [
     _Exercise(
       id: 'bench-press',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Bench_Press_-_Medium_Grip/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Bench_Press_-_Medium_Grip/1.jpg'],
       name: 'Bench Press',
       muscle: 'Chest · Shoulders · Triceps',
       sets: [_SetSpec(10), _SetSpec(8), _SetSpec(6)],
@@ -1061,6 +1134,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'chest-press-machine',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Machine_Bench_Press/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Machine_Bench_Press/1.jpg'],
       name: 'Chest Press Machine',
       muscle: 'Chest · Anterior Deltoid',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
@@ -1074,6 +1148,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'incline-dumbbell-press',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Incline_Dumbbell_Press/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Incline_Dumbbell_Press/1.jpg'],
       name: 'Incline Dumbbell Press',
       muscle: 'Upper Chest · Shoulders',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
@@ -1087,6 +1162,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'dumbbell-bench-press',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dumbbell_Bench_Press/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dumbbell_Bench_Press/1.jpg'],
       name: 'Dumbbell Bench Press',
       muscle: 'Chest · Triceps',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
@@ -1100,6 +1176,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'cable-fly',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Crossover/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Crossover/1.jpg'],
       name: 'Cable Fly',
       muscle: 'Chest · Inner Pec',
       sets: [_SetSpec(15), _SetSpec(12), _SetSpec(12)],
@@ -1113,6 +1190,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'cable-crossover',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Crossover/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Crossover/1.jpg'],
       name: 'Cable Crossover',
       muscle: 'Lower Chest',
       sets: [_SetSpec(15), _SetSpec(15), _SetSpec(12)],
@@ -1126,6 +1204,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'chest-dips',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dips_-_Chest_Version/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dips_-_Chest_Version/1.jpg'],
       name: 'Chest Dips',
       muscle: 'Lower Chest · Triceps',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
@@ -1139,6 +1218,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'push-up',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Pushups/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Pushups/1.jpg'],
       name: 'Push-Up',
       muscle: 'Chest · Core',
       sets: [_SetSpec(20), _SetSpec(20), _SetSpec(15)],
@@ -1152,6 +1232,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'decline-bench-press',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Decline_Barbell_Bench_Press/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Decline_Barbell_Bench_Press/1.jpg'],
       name: 'Decline Bench Press',
       muscle: 'Lower Chest · Triceps',
       sets: [_SetSpec(10), _SetSpec(8), _SetSpec(6)],
@@ -1167,6 +1248,7 @@ const _workoutData = <String, List<_Exercise>>{
   'Shoulders': [
     _Exercise(
       id: 'overhead-press',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Standing_Military_Press/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Standing_Military_Press/1.jpg'],
       name: 'Overhead Press',
       muscle: 'Shoulders · Triceps',
       sets: [_SetSpec(10), _SetSpec(8), _SetSpec(6)],
@@ -1180,6 +1262,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'dumbbell-shoulder-press',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Seated_Dumbbell_Press/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Seated_Dumbbell_Press/1.jpg'],
       name: 'Dumbbell Shoulder Press',
       muscle: 'Shoulders',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
@@ -1193,6 +1276,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'lateral-raise',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Side_Lateral_Raise/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Side_Lateral_Raise/1.jpg'],
       name: 'Lateral Raise',
       muscle: 'Side Delts',
       sets: [_SetSpec(15), _SetSpec(15), _SetSpec(12)],
@@ -1206,6 +1290,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'front-raise',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Front_Dumbbell_Raise/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Front_Dumbbell_Raise/1.jpg'],
       name: 'Front Raise',
       muscle: 'Front Delts',
       sets: [_SetSpec(15), _SetSpec(12), _SetSpec(12)],
@@ -1219,6 +1304,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'arnold-press',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Arnold_Dumbbell_Press/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Arnold_Dumbbell_Press/1.jpg'],
       name: 'Arnold Press',
       muscle: 'Shoulders',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
@@ -1232,6 +1318,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'face-pull',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Face_Pull/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Face_Pull/1.jpg'],
       name: 'Face Pull',
       muscle: 'Rear Delts · Upper Back',
       sets: [_SetSpec(15), _SetSpec(15), _SetSpec(12)],
@@ -1245,6 +1332,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'shrugs',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Shrug/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Shrug/1.jpg'],
       name: 'Barbell Shrugs',
       muscle: 'Traps',
       sets: [_SetSpec(15), _SetSpec(15), _SetSpec(12)],
@@ -1260,6 +1348,7 @@ const _workoutData = <String, List<_Exercise>>{
   'Bicep': [
     _Exercise(
       id: 'barbell-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Curl/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Curl/1.jpg'],
       name: 'Barbell Curl',
       muscle: 'Biceps',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
@@ -1273,6 +1362,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'dumbbell-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dumbbell_Bicep_Curl/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dumbbell_Bicep_Curl/1.jpg'],
       name: 'Dumbbell Curl',
       muscle: 'Biceps',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(10)],
@@ -1286,6 +1376,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'hammer-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Hammer_Curls/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Hammer_Curls/1.jpg'],
       name: 'Hammer Curl',
       muscle: 'Biceps · Brachialis',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(10)],
@@ -1299,6 +1390,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'preacher-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Preacher_Curl/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Preacher_Curl/1.jpg'],
       name: 'Preacher Curl',
       muscle: 'Biceps',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
@@ -1312,6 +1404,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'incline-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Incline_Dumbbell_Curl/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Incline_Dumbbell_Curl/1.jpg'],
       name: 'Incline Dumbbell Curl',
       muscle: 'Biceps · Long Head',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(10)],
@@ -1325,6 +1418,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'cable-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Standing_Biceps_Cable_Curl/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Standing_Biceps_Cable_Curl/1.jpg'],
       name: 'Cable Curl',
       muscle: 'Biceps',
       sets: [_SetSpec(15), _SetSpec(12), _SetSpec(12)],
@@ -1338,6 +1432,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'concentration-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Concentration_Curls/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Concentration_Curls/1.jpg'],
       name: 'Concentration Curl',
       muscle: 'Biceps Peak',
       sets: [_SetSpec(12), _SetSpec(12), _SetSpec(10)],
@@ -1353,6 +1448,7 @@ const _workoutData = <String, List<_Exercise>>{
   'Tricep': [
     _Exercise(
       id: 'tricep-pushdown',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Triceps_Pushdown/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Triceps_Pushdown/1.jpg'],
       name: 'Tricep Pushdown',
       muscle: 'Triceps · Lateral Head',
       sets: [_SetSpec(15), _SetSpec(12), _SetSpec(10)],
@@ -1366,6 +1462,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'rope-pushdown',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Triceps_Pushdown_-_Rope_Attachment/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Triceps_Pushdown_-_Rope_Attachment/1.jpg'],
       name: 'Rope Pushdown',
       muscle: 'Triceps',
       sets: [_SetSpec(15), _SetSpec(12), _SetSpec(12)],
@@ -1379,6 +1476,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'overhead-extension',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Standing_Dumbbell_Triceps_Extension/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Standing_Dumbbell_Triceps_Extension/1.jpg'],
       name: 'Overhead Extension',
       muscle: 'Triceps · Long Head',
       sets: [_SetSpec(12), _SetSpec(12), _SetSpec(10)],
@@ -1392,6 +1490,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'skull-crusher',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Lying_Triceps_Press/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Lying_Triceps_Press/1.jpg'],
       name: 'Skull Crushers',
       muscle: 'Triceps',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
@@ -1405,6 +1504,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'close-grip-bench',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Close-Grip_Barbell_Bench_Press/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Close-Grip_Barbell_Bench_Press/1.jpg'],
       name: 'Close-Grip Bench Press',
       muscle: 'Triceps · Chest',
       sets: [_SetSpec(10), _SetSpec(8), _SetSpec(8)],
@@ -1418,6 +1518,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'tricep-dips',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dips_-_Triceps_Version/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dips_-_Triceps_Version/1.jpg'],
       name: 'Tricep Dips',
       muscle: 'Triceps',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(10)],
@@ -1431,6 +1532,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'tricep-kickback',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Tricep_Dumbbell_Kickback/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Tricep_Dumbbell_Kickback/1.jpg'],
       name: 'Tricep Kickback',
       muscle: 'Triceps',
       sets: [_SetSpec(15), _SetSpec(12), _SetSpec(12)],
@@ -1446,6 +1548,7 @@ const _workoutData = <String, List<_Exercise>>{
   'Arms': [
     _Exercise(
       id: 'wrist-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Palms-Up_Barbell_Wrist_Curl_Over_A_Bench/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Palms-Up_Barbell_Wrist_Curl_Over_A_Bench/1.jpg'],
       name: 'Wrist Curl',
       muscle: 'Forearms',
       sets: [_SetSpec(20, 10), _SetSpec(20, 10), _SetSpec(20, 10)],
@@ -1459,6 +1562,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'reverse-wrist-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Palms-Down_Wrist_Curl_Over_A_Bench/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Palms-Down_Wrist_Curl_Over_A_Bench/1.jpg'],
       name: 'Reverse Wrist Curl',
       muscle: 'Forearm Extensors',
       sets: [_SetSpec(20), _SetSpec(20), _SetSpec(15)],
@@ -1472,6 +1576,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'reverse-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Reverse_Barbell_Curl/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Reverse_Barbell_Curl/1.jpg'],
       name: 'Reverse Curl',
       muscle: 'Forearms · Brachialis',
       sets: [_SetSpec(15), _SetSpec(12), _SetSpec(12)],
@@ -1485,6 +1590,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'farmers-carry',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Farmers_Walk/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Farmers_Walk/1.jpg'],
       name: 'Farmer’s Carry',
       muscle: 'Forearms · Grip · Core',
       sets: [_SetSpec(1), _SetSpec(1), _SetSpec(1)],
@@ -1500,6 +1606,7 @@ const _workoutData = <String, List<_Exercise>>{
   'Back': [
     _Exercise(
       id: 'deadlift',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Deadlift/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Deadlift/1.jpg'],
       name: 'Deadlift',
       muscle: 'Lower Back · Glutes · Hamstrings',
       sets: [_SetSpec(8), _SetSpec(6), _SetSpec(5)],
@@ -1513,6 +1620,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'pull-up',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Pullups/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Pullups/1.jpg'],
       name: 'Pull-Up',
       muscle: 'Lats · Upper Back',
       sets: [_SetSpec(10), _SetSpec(8), _SetSpec(6)],
@@ -1526,6 +1634,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'lat-pulldown',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Wide-Grip_Lat_Pulldown/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Wide-Grip_Lat_Pulldown/1.jpg'],
       name: 'Lat Pulldown',
       muscle: 'Lats',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(10)],
@@ -1539,6 +1648,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'bent-over-row',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Bent_Over_Barbell_Row/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Bent_Over_Barbell_Row/1.jpg'],
       name: 'Bent-Over Row',
       muscle: 'Mid Back · Lats',
       sets: [_SetSpec(10), _SetSpec(8), _SetSpec(8)],
@@ -1552,6 +1662,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'seated-cable-row',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Seated_Cable_Rows/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Seated_Cable_Rows/1.jpg'],
       name: 'Seated Cable Row',
       muscle: 'Mid Back',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(10)],
@@ -1565,6 +1676,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 't-bar-row',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Lying_T-Bar_Row/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Lying_T-Bar_Row/1.jpg'],
       name: 'T-Bar Row',
       muscle: 'Mid Back · Lats',
       sets: [_SetSpec(10), _SetSpec(10), _SetSpec(8)],
@@ -1580,6 +1692,7 @@ const _workoutData = <String, List<_Exercise>>{
   'Abs': [
     _Exercise(
       id: 'crunches',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Crunches/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Crunches/1.jpg'],
       name: 'Crunches',
       muscle: 'Rectus Abdominis',
       sets: [_SetSpec(20), _SetSpec(20), _SetSpec(20)],
@@ -1593,6 +1706,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'plank',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Plank/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Plank/1.jpg'],
       name: 'Plank',
       muscle: 'Core · Transverse Abdominis',
       sets: [_SetSpec(1), _SetSpec(1), _SetSpec(1)],
@@ -1606,6 +1720,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'leg-raises',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Front_Leg_Raises/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Front_Leg_Raises/1.jpg'],
       name: 'Leg Raises',
       muscle: 'Lower Abs',
       sets: [_SetSpec(15), _SetSpec(15), _SetSpec(12)],
@@ -1619,6 +1734,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'russian-twist',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Russian_Twist/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Russian_Twist/1.jpg'],
       name: 'Russian Twist',
       muscle: 'Obliques',
       sets: [_SetSpec(20), _SetSpec(20), _SetSpec(20)],
@@ -1632,6 +1748,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'bicycle-crunch',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Air_Bike/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Air_Bike/1.jpg'],
       name: 'Bicycle Crunch',
       muscle: 'Abs · Obliques',
       sets: [_SetSpec(20), _SetSpec(20), _SetSpec(20)],
@@ -1645,6 +1762,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'mountain-climbers',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Mountain_Climbers/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Mountain_Climbers/1.jpg'],
       name: 'Mountain Climbers',
       muscle: 'Core · Cardio',
       sets: [_SetSpec(30), _SetSpec(30), _SetSpec(30)],
@@ -1658,6 +1776,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'hanging-leg-raise',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Hanging_Leg_Raise/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Hanging_Leg_Raise/1.jpg'],
       name: 'Hanging Leg Raise',
       muscle: 'Lower Abs',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(10)],
@@ -1673,6 +1792,7 @@ const _workoutData = <String, List<_Exercise>>{
   'Legs': [
     _Exercise(
       id: 'squat',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/1.jpg'],
       name: 'Barbell Squat',
       muscle: 'Quads · Glutes · Hamstrings',
       sets: [_SetSpec(10), _SetSpec(8), _SetSpec(6)],
@@ -1686,6 +1806,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'leg-press',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Leg_Press/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Leg_Press/1.jpg'],
       name: 'Leg Press',
       muscle: 'Quads · Glutes',
       sets: [_SetSpec(12), _SetSpec(10), _SetSpec(10)],
@@ -1699,6 +1820,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'lunges',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Walking_Lunge/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Walking_Lunge/1.jpg'],
       name: 'Walking Lunges',
       muscle: 'Quads · Glutes',
       sets: [_SetSpec(12), _SetSpec(12), _SetSpec(10)],
@@ -1712,6 +1834,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'romanian-deadlift',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Romanian_Deadlift/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Romanian_Deadlift/1.jpg'],
       name: 'Romanian Deadlift',
       muscle: 'Hamstrings · Glutes',
       sets: [_SetSpec(10), _SetSpec(10), _SetSpec(8)],
@@ -1725,6 +1848,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'leg-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Lying_Leg_Curls/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Lying_Leg_Curls/1.jpg'],
       name: 'Leg Curl',
       muscle: 'Hamstrings',
       sets: [_SetSpec(15), _SetSpec(12), _SetSpec(12)],
@@ -1738,6 +1862,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'leg-extension',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Leg_Extensions/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Leg_Extensions/1.jpg'],
       name: 'Leg Extension',
       muscle: 'Quads',
       sets: [_SetSpec(15), _SetSpec(12), _SetSpec(12)],
@@ -1751,6 +1876,7 @@ const _workoutData = <String, List<_Exercise>>{
     ),
     _Exercise(
       id: 'calf-raise',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Standing_Calf_Raises/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Standing_Calf_Raises/1.jpg'],
       name: 'Standing Calf Raise',
       muscle: 'Calves',
       sets: [_SetSpec(20), _SetSpec(20), _SetSpec(15)],
