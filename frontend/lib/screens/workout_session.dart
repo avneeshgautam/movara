@@ -739,6 +739,23 @@ class _ExerciseCardState extends State<_ExerciseCard> {
 String _formatWeight(double v) =>
     v == v.roundToDouble() ? v.toInt().toString() : v.toString();
 
+/// A duotone [ColorFilter] that remaps a photo's tones onto a two-colour
+/// ramp: the darkest pixels (the figure) become [shadow] and the brightest
+/// (the studio background) become [highlight]. Driven by luminance, so it
+/// keeps the shape of the movement while dressing the photo in the theme.
+ColorFilter _duotone(Color shadow, Color highlight) {
+  const lr = 0.2126, lg = 0.7152, lb = 0.0722; // Rec. 709 luma weights
+  final dr = highlight.r - shadow.r;
+  final dg = highlight.g - shadow.g;
+  final db = highlight.b - shadow.b;
+  return ColorFilter.matrix(<double>[
+    lr * dr, lg * dr, lb * dr, 0, shadow.r * 255,
+    lr * dg, lg * dg, lb * dg, 0, shadow.g * 255,
+    lr * db, lg * db, lb * db, 0, shadow.b * 255,
+    0, 0, 0, 1, 0,
+  ]);
+}
+
 // ── Demo sheet ──────────────────────────────────────────────────────
 
 class _DemoSheet extends StatefulWidget {
@@ -988,13 +1005,16 @@ class _ExerciseThumb extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.cover,
-        // Free-exercise-db photos sit on a white background; wrap them so
-        // they don't look out of place on the dark cards.
-        color: Colors.white,
-        colorBlendMode: BlendMode.dstOver,
         errorBuilder: (_, __, ___) => fallback,
-        loadingBuilder: (_, child, progress) =>
-            progress == null ? child : fallback,
+        // Duotone the loaded photo so its white studio background melts into
+        // the card and the figure takes the theme accent — a dark-themed
+        // photo in dark mode, an orange-tinted one in light mode.
+        loadingBuilder: (_, child, progress) => progress != null
+            ? fallback
+            : ColorFiltered(
+                colorFilter: _duotone(c.accent, c.surface),
+                child: child,
+              ),
       ),
     );
   }
@@ -1054,11 +1074,13 @@ class _DemoFigureState extends State<_DemoFigure> {
           images[_frame.clamp(0, images.length - 1)],
           key: ValueKey(_frame),
           fit: BoxFit.contain,
-          color: Colors.white,
-          colorBlendMode: BlendMode.dstOver,
           errorBuilder: (_, __, ___) => Center(child: fallback),
-          loadingBuilder: (_, child, progress) =>
-              progress == null ? child : Center(child: fallback),
+          loadingBuilder: (_, child, progress) => progress != null
+              ? Center(child: fallback)
+              : ColorFiltered(
+                  colorFilter: _duotone(c.accent, c.surface2),
+                  child: child,
+                ),
         ),
       );
     }
