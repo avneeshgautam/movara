@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:geolocator/geolocator.dart' hide ActivityType;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:movara_app/models/run_record.dart';
@@ -95,6 +95,63 @@ void main() {
     test('formats an hour-long run with hours', () {
       expect(formatDuration(const Duration(hours: 1, minutes: 5, seconds: 3)),
           '1:05:03');
+    });
+
+    test('defaults to a run and keeps activity type across JSON', () {
+      expect(_run().activityType, ActivityType.run);
+
+      final hike = RunRecord(
+        id: 'h',
+        startedAt: DateTime.now(),
+        elapsedSeconds: 3600,
+        distanceMeters: 4000,
+        activityType: ActivityType.hike,
+        elevationGainMeters: 220,
+        route: const [
+          RunPoint(28.61, 77.20, 500),
+          RunPoint(28.62, 77.21, 720),
+        ],
+      );
+      final back = RunRecord.fromJson(hike.toJson());
+      expect(back.activityType, ActivityType.hike);
+      expect(back.elevationGainMeters, 220);
+      expect(back.route.last.altitude, 720);
+      expect(back.maxAltitude, 720);
+    });
+
+    test('calories reflect the activity type and climb', () {
+      RunRecord make(ActivityType type, {double gain = 0}) => RunRecord(
+            id: 't',
+            startedAt: DateTime.now(),
+            elapsedSeconds: 600,
+            distanceMeters: 5000,
+            activityType: type,
+            elevationGainMeters: gain,
+            route: const [],
+          );
+
+      // 5 km: run 65/km, walk 50/km.
+      expect(make(ActivityType.run).estimatedCalories, 325);
+      expect(make(ActivityType.walk).estimatedCalories, 250);
+      // Hike 55/km plus ~0.5 kcal per metre climbed: 275 + 100 = 375.
+      expect(make(ActivityType.hike, gain: 200).estimatedCalories, 375);
+    });
+
+    test('old records without an activity type load as a run', () {
+      final legacy = {
+        'id': 'old',
+        'startedAt': DateTime.now().toIso8601String(),
+        'elapsedSeconds': 600,
+        'movingSeconds': 500,
+        'distanceMeters': 2000,
+        'route': [
+          {'lat': 28.61, 'lng': 77.20},
+        ],
+      };
+      final back = RunRecord.fromJson(legacy);
+      expect(back.activityType, ActivityType.run);
+      expect(back.elevationGainMeters, 0);
+      expect(back.route.first.altitude, isNull);
     });
   });
 
@@ -524,7 +581,7 @@ void main() {
         (tester) async {
       await pump(tester, []);
 
-      expect(find.text('No runs yet'), findsOneWidget);
+      expect(find.text('No activities yet'), findsOneWidget);
       expect(find.text('Record Activity'), findsOneWidget);
       // Nothing may be presented as a personal best before anything is run.
       expect(find.text('YOUR BESTS'), findsNothing);
@@ -546,12 +603,12 @@ void main() {
 
     testWidgets('deleting a run clears it from the feed', (tester) async {
       await pump(tester, [_run(id: 'a')]);
-      expect(find.text('No runs yet'), findsNothing);
+      expect(find.text('No activities yet'), findsNothing);
 
       await tester.tap(find.byIcon(Icons.delete_outline));
       await tester.pump();
 
-      expect(find.text('No runs yet'), findsOneWidget);
+      expect(find.text('No activities yet'), findsOneWidget);
     });
   });
 

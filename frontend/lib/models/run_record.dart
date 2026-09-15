@@ -1,17 +1,47 @@
 import 'dart:convert';
 
+/// The kind of activity a recording is. Each carries its own label, emoji and
+/// a rough kcal-per-km factor for the calorie estimate.
+enum ActivityType {
+  run('Run', '🏃', 65),
+  walk('Walk', '🚶', 50),
+  hike('Hike', '🥾', 55);
+
+  const ActivityType(this.label, this.emoji, this.kcalPerKm);
+
+  final String label;
+  final String emoji;
+  final double kcalPerKm;
+
+  static ActivityType fromName(String? name) => ActivityType.values.firstWhere(
+        (t) => t.name == name,
+        orElse: () => ActivityType.run,
+      );
+}
+
 /// One GPS sample along a route. Kept free of any map-library types so the
 /// model stays testable and the mapping package remains swappable.
 class RunPoint {
-  const RunPoint(this.lat, this.lng);
+  const RunPoint(this.lat, this.lng, [this.altitude]);
 
   final double lat;
   final double lng;
 
-  Map<String, dynamic> toJson() => {'lat': lat, 'lng': lng};
+  /// Metres above sea level, when the device reports it (null on the web,
+  /// where browsers don't expose altitude).
+  final double? altitude;
 
-  factory RunPoint.fromJson(Map<String, dynamic> json) =>
-      RunPoint((json['lat'] as num).toDouble(), (json['lng'] as num).toDouble());
+  Map<String, dynamic> toJson() => {
+        'lat': lat,
+        'lng': lng,
+        if (altitude != null) 'alt': altitude,
+      };
+
+  factory RunPoint.fromJson(Map<String, dynamic> json) => RunPoint(
+        (json['lat'] as num).toDouble(),
+        (json['lng'] as num).toDouble(),
+        (json['alt'] as num?)?.toDouble(),
+      );
 }
 
 /// A completed run: how far, how long, and the path taken.
@@ -23,6 +53,8 @@ class RunRecord {
     required this.distanceMeters,
     required this.route,
     this.movingSeconds = 0,
+    this.activityType = ActivityType.run,
+    this.elevationGainMeters = 0,
   });
 
   final String id;
@@ -35,7 +67,24 @@ class RunRecord {
   /// saved before this existed have 0 and fall back to elapsed time.
   final int movingSeconds;
 
+  /// Run / Walk / Hike. Old records saved before this existed default to run.
+  final ActivityType activityType;
+
+  /// Total metres climbed over the activity (sum of positive, smoothed
+  /// altitude changes). Zero when altitude was never available.
+  final double elevationGainMeters;
+
   double get distanceKm => distanceMeters / 1000;
+
+  /// Highest altitude reached along the route, or null if none was recorded.
+  double? get maxAltitude {
+    double? best;
+    for (final p in route) {
+      final a = p.altitude;
+      if (a != null && (best == null || a > best)) best = a;
+    }
+    return best;
+  }
 
   Duration get elapsed => Duration(seconds: elapsedSeconds);
 
@@ -48,10 +97,12 @@ class RunRecord {
   double get paceSecondsPerKm =>
       distanceKm > 0.05 ? paceBaseSeconds / distanceKm : 0;
 
-  /// Rough estimate only: running burns very roughly 65 kcal per km for an
-  /// average adult. Deliberately simple and deterministic — there is no
-  /// heart-rate sensor behind it, so it is labelled as an estimate in the UI.
-  int get estimatedCalories => (distanceKm * 65).round();
+  /// Rough estimate only: a per-activity kcal-per-km factor plus roughly
+  /// 0.5 kcal for every metre climbed. Deliberately simple and deterministic
+  /// — there is no heart-rate sensor behind it, so it is labelled as an
+  /// estimate in the UI.
+  int get estimatedCalories =>
+      (distanceKm * activityType.kcalPerKm + elevationGainMeters * 0.5).round();
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -59,6 +110,8 @@ class RunRecord {
         'elapsedSeconds': elapsedSeconds,
         'movingSeconds': movingSeconds,
         'distanceMeters': distanceMeters,
+        'activityType': activityType.name,
+        'elevationGain': elevationGainMeters,
         'route': route.map((p) => p.toJson()).toList(),
       };
 
@@ -68,6 +121,9 @@ class RunRecord {
         elapsedSeconds: json['elapsedSeconds'] as int,
         movingSeconds: json['movingSeconds'] as int? ?? 0,
         distanceMeters: (json['distanceMeters'] as num).toDouble(),
+        activityType: ActivityType.fromName(json['activityType'] as String?),
+        elevationGainMeters:
+            (json['elevationGain'] as num?)?.toDouble() ?? 0,
         route: (json['route'] as List<dynamic>)
             .map((p) => RunPoint.fromJson(p as Map<String, dynamic>))
             .toList(),

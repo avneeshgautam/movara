@@ -204,7 +204,7 @@ class _TabBar extends StatelessWidget {
   static const _items = [
     (icon: Icons.home_outlined, label: 'Home'),
     (icon: Icons.fitness_center, label: 'Workout'),
-    (icon: Icons.directions_run, label: 'Running'),
+    (icon: Icons.directions_run, label: 'Activity'),
     (icon: Icons.water_drop_outlined, label: 'Reminders'),
     (icon: Icons.chat_bubble_outline, label: 'Feed'),
     (icon: Icons.person_outline, label: 'Account'),

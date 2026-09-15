@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:geolocator/geolocator.dart';
+// Geolocator also exports an `ActivityType`; hide it so ours (from
+// run_record) wins, and reach geolocator's via the `geo` prefix.
+import 'package:geolocator/geolocator.dart' hide ActivityType;
+import 'package:geolocator/geolocator.dart' as geo show ActivityType;
 
 import '../models/run_record.dart';
 
@@ -61,6 +64,13 @@ class RunTracker extends ChangeNotifier {
   double? _accuracyMetres;
   int _movingMillis = 0;
   DateTime? _lastStepAt;
+  ActivityType _activityType = ActivityType.run;
+  double _elevationGain = 0;
+  double? _smoothAltitude;
+
+  /// Smallest smoothed altitude rise that counts toward elevation gain, in
+  /// metres — below this it is treated as GPS altitude noise.
+  static const _minElevationStep = 0.5;
 
   TrackerState get state => _state;
   Duration get elapsed {
@@ -98,10 +108,18 @@ class RunTracker extends ChangeNotifier {
     return base / distanceKm;
   }
 
-  int get estimatedCalories => (distanceKm * 65).round();
+  /// The activity being recorded (run / walk / hike).
+  ActivityType get activityType => _activityType;
 
-  Future<void> start() async {
+  /// Metres climbed so far, from smoothed altitude changes.
+  double get elevationGainMeters => _elevationGain;
+
+  int get estimatedCalories =>
+      (distanceKm * _activityType.kcalPerKm + _elevationGain * 0.5).round();
+
+  Future<void> start({ActivityType type = ActivityType.run}) async {
     _reset();
+    _activityType = type;
     _state = TrackerState.acquiring;
     notifyListeners();
 
@@ -150,7 +168,8 @@ class RunTracker extends ChangeNotifier {
       return;
     }
 
-    final point = RunPoint(position.latitude, position.longitude);
+    final altitude = position.altitude != 0 ? position.altitude : null;
+    final point = RunPoint(position.latitude, position.longitude, altitude);
     _current = point;
     _error = null;
 
@@ -199,8 +218,25 @@ class RunTracker extends ChangeNotifier {
       // First recorded point: start the moving-time reference here.
       _lastStepAt = DateTime.now();
     }
+    _updateElevation(altitude);
     _route.add(point);
     notifyListeners();
+  }
+
+  /// Folds a new altitude reading into the running elevation gain. Smooths
+  /// with an exponential moving average first, then only counts a rise above
+  /// [_minElevationStep] so GPS altitude jitter doesn't inflate the total.
+  void _updateElevation(double? altitude) {
+    if (altitude == null) return;
+    final prev = _smoothAltitude;
+    if (prev == null) {
+      _smoothAltitude = altitude;
+      return;
+    }
+    final smoothed = prev * 0.6 + altitude * 0.4;
+    final rise = smoothed - prev;
+    if (rise > _minElevationStep) _elevationGain += rise;
+    _smoothAltitude = smoothed;
   }
 
   void pause() {
@@ -243,6 +279,8 @@ class RunTracker extends ChangeNotifier {
       elapsedSeconds: total.inSeconds,
       movingSeconds: movingSeconds,
       distanceMeters: _distanceMeters,
+      activityType: _activityType,
+      elevationGainMeters: _elevationGain,
       route: List.of(_route),
     );
     notifyListeners();
@@ -263,6 +301,9 @@ class RunTracker extends ChangeNotifier {
     _movingMillis = 0;
     _lastStepAt = null;
     _distanceMeters = 0;
+    _elevationGain = 0;
+    _smoothAltitude = null;
+    _activityType = ActivityType.run;
     _route.clear();
     _current = null;
     _error = null;
@@ -294,7 +335,7 @@ class RunTracker extends ChangeNotifier {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
       return AppleSettings(
         accuracy: LocationAccuracy.best,
-        activityType: ActivityType.fitness,
+        activityType: geo.ActivityType.fitness,
         distanceFilter: 0,
         // Requires the location background mode in Info.plist; without it
         // iOS terminates the app instead of delivering updates.

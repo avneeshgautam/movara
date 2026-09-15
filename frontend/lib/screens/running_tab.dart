@@ -41,9 +41,9 @@ class _RunningTabState extends State<RunningTab> {
     super.dispose();
   }
 
-  Future<void> _startRun() async {
+  Future<void> _startRun(ActivityType type) async {
     setState(() => _screen = _Screen.live);
-    await _tracker.start();
+    await _tracker.start(type: type);
   }
 
   void _finishRun() {
@@ -104,9 +104,65 @@ class _Feed extends StatelessWidget {
   const _Feed({required this.store, required this.onRecord});
 
   final RunStore store;
-  final VoidCallback onRecord;
+  final void Function(ActivityType) onRecord;
 
   static const _weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  /// Pops the Run / Walk / Hike chooser, then starts recording the pick.
+  Future<void> _chooseActivity(BuildContext context) async {
+    final c = context.movara;
+    final type = await showModalBottomSheet<ActivityType>(
+      context: context,
+      backgroundColor: c.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 10),
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: c.border, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
+              child: Text('CHOOSE ACTIVITY',
+                  style: TextStyle(
+                      color: c.textMuted, fontSize: 10, letterSpacing: 1.6)),
+            ),
+            for (final type in ActivityType.values)
+              ListTile(
+                leading: Text(type.emoji, style: const TextStyle(fontSize: 24)),
+                title: Text(type.label,
+                    style: AppTheme.display(
+                        color: c.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700)),
+                subtitle: Text(_activityBlurb(type),
+                    style: TextStyle(color: c.textMuted, fontSize: 11)),
+                trailing: Icon(Icons.chevron_right, color: c.textMuted),
+                onTap: () => Navigator.pop(ctx, type),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (type != null) onRecord(type);
+  }
+
+  static String _activityBlurb(ActivityType type) => switch (type) {
+        ActivityType.run => 'GPS route · pace · calories',
+        ActivityType.walk => 'GPS route · steps pace · calories',
+        ActivityType.hike => 'GPS route · elevation gain · calories',
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -127,7 +183,7 @@ class _Feed extends StatelessWidget {
                 style: TextStyle(
                     color: c.textMuted, fontSize: 10, letterSpacing: 1.6)),
             const SizedBox(height: 2),
-            Text('Running',
+            Text('Activity',
                 style: AppTheme.display(
                     color: c.textPrimary, fontSize: 24, fontWeight: FontWeight.w800)),
             const SizedBox(height: 18),
@@ -173,7 +229,7 @@ class _Feed extends StatelessWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('RUNS',
+                          Text('ACTIVITIES',
                               style: TextStyle(
                                   color: c.textMuted, fontSize: 10, letterSpacing: 1.6)),
                           Text('${store.runsThisWeek()}',
@@ -264,7 +320,7 @@ class _Feed extends StatelessWidget {
               const SizedBox(height: 20),
             ],
 
-            Text('YOUR RUNS',
+            Text('YOUR ACTIVITIES',
                 style: AppTheme.display(
                     color: c.textMuted,
                     fontSize: 10,
@@ -287,7 +343,7 @@ class _Feed extends StatelessWidget {
   Widget _recordButton(BuildContext context) {
     final c = context.movara;
     return GestureDetector(
-      onTap: onRecord,
+      onTap: () => _chooseActivity(context),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
@@ -304,7 +360,9 @@ class _Feed extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('🏃', style: TextStyle(fontSize: 24)),
+            const Text('🏃', style: TextStyle(fontSize: 22)),
+            const Text('🚶', style: TextStyle(fontSize: 22)),
+            const Text('🥾', style: TextStyle(fontSize: 22)),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,7 +372,7 @@ class _Feed extends StatelessWidget {
                     style: AppTheme.display(
                         color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 2),
-                const Text('GPS · Live route · Share as image',
+                const Text('Run · Walk · Hike — with GPS route',
                     style: TextStyle(color: Colors.white70, fontSize: 11)),
               ],
             ),
@@ -366,10 +424,11 @@ class _Feed extends StatelessWidget {
         children: [
           const Text('🏃', style: TextStyle(fontSize: 30)),
           const SizedBox(height: 12),
-          Text('No runs yet',
+          Text('No activities yet',
               style: AppTheme.display(color: c.textPrimary, fontSize: 15)),
           const SizedBox(height: 4),
-          Text('Tap Record Activity and your route will be mapped as you go.',
+          Text('Tap Record Activity, pick Run, Walk or Hike, and your route '
+              'will be mapped as you go.',
               textAlign: TextAlign.center,
               style: TextStyle(color: c.textSecondary, fontSize: 12)),
         ],
@@ -419,14 +478,15 @@ class _RunCardState extends State<_RunCard> {
                       alignment: Alignment.center,
                       decoration:
                           BoxDecoration(color: c.accentSoft, shape: BoxShape.circle),
-                      child: const Text('🏃', style: TextStyle(fontSize: 18)),
+                      child: Text(run.activityType.emoji,
+                          style: const TextStyle(fontSize: 18)),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(_title(run.startedAt),
+                          Text(_title(run.startedAt, run.activityType),
                               style: AppTheme.display(
                                   color: c.textPrimary,
                                   fontSize: 14,
@@ -449,7 +509,11 @@ class _RunCardState extends State<_RunCard> {
                   children: [
                     _stat(context, 'DISTANCE', '${run.distanceKm.toStringAsFixed(2)} km'),
                     const SizedBox(width: 8),
-                    _stat(context, 'PACE', '${formatPace(run.paceSecondsPerKm)}/km'),
+                    if (run.activityType == ActivityType.hike)
+                      _stat(context, 'ELEV GAIN',
+                          '${run.elevationGainMeters.round()} m')
+                    else
+                      _stat(context, 'PACE', '${formatPace(run.paceSecondsPerKm)}/km'),
                     const SizedBox(width: 8),
                     _stat(context, 'TIME', formatDuration(run.elapsed)),
                   ],
@@ -488,13 +552,17 @@ class _RunCardState extends State<_RunCard> {
     );
   }
 
-  /// Runs are named by time of day, the way most trackers do it.
-  String _title(DateTime at) {
+  /// Activities are named by time of day and type, the way most trackers do.
+  String _title(DateTime at, ActivityType type) {
     final h = at.hour;
-    if (h < 12) return 'Morning Run';
-    if (h < 17) return 'Afternoon Run';
-    if (h < 21) return 'Evening Run';
-    return 'Night Run';
+    final part = h < 12
+        ? 'Morning'
+        : h < 17
+            ? 'Afternoon'
+            : h < 21
+                ? 'Evening'
+                : 'Night';
+    return '$part ${type.label}';
   }
 
   Widget _stat(BuildContext context, String label, String value) {
@@ -582,7 +650,9 @@ class _LiveTracker extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text(tracker.isPaused ? 'PAUSED' : 'RECORDING',
+                          Text(
+                              '${tracker.activityType.label.toUpperCase()} · '
+                              '${tracker.isPaused ? 'PAUSED' : 'RECORDING'}',
                               style: AppTheme.display(
                                 color: tracker.isPaused ? c.textMuted : c.green,
                                 fontSize: 11,
@@ -607,7 +677,12 @@ class _LiveTracker extends StatelessWidget {
                       _liveStat(context, 'PACE',
                           formatPace(tracker.paceSecondsPerKm), '/km'),
                       const SizedBox(width: 8),
-                      _liveStat(context, 'CAL', '${tracker.estimatedCalories}', 'est.'),
+                      if (tracker.activityType == ActivityType.hike)
+                        _liveStat(context, 'ELEV',
+                            '${tracker.elevationGainMeters.round()}', 'm ↑')
+                      else
+                        _liveStat(
+                            context, 'CAL', '${tracker.estimatedCalories}', 'est.'),
                     ],
                   ),
                   const SizedBox(height: 14),
@@ -790,7 +865,7 @@ class _SummaryState extends State<_Summary> {
         ListView(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
           children: [
-            Text('✓ RUN COMPLETE',
+            Text('✓ ${run.activityType.label.toUpperCase()} COMPLETE',
                 style: AppTheme.display(
                     color: c.green,
                     fontSize: 10,
@@ -853,6 +928,20 @@ class _SummaryState extends State<_Summary> {
                 _card(context, '🔥', 'Calories', '~${run.estimatedCalories} kcal'),
               ],
             ),
+            if (run.activityType == ActivityType.hike) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _card(context, '⛰️', 'Elev gain',
+                      '${run.elevationGainMeters.round()} m'),
+                  const SizedBox(width: 12),
+                  _card(context, '🏔️', 'Max altitude',
+                      run.maxAltitude != null
+                          ? '${run.maxAltitude!.round()} m'
+                          : '--'),
+                ],
+              ),
+            ],
             const SizedBox(height: 18),
             _primaryButton(context, 'Save Activity', widget.onSave),
             const SizedBox(height: 10),
