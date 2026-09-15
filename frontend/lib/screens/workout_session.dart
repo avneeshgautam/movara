@@ -753,6 +753,11 @@ class _DemoSheet extends StatefulWidget {
 class _DemoSheetState extends State<_DemoSheet> {
   int _step = 0;
 
+  void _setStep(int i) {
+    final n = i.clamp(0, widget.exercise.steps.length - 1);
+    if (n != _step) setState(() => _step = n);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.movara;
@@ -818,60 +823,100 @@ class _DemoSheetState extends State<_DemoSheet> {
             ],
           ),
           const SizedBox(height: 18),
-          // Figure area — flips between the start and end frame so the
-          // movement reads as animated. Falls back to the icon if the
-          // photos are missing or fail to load.
-          _DemoFigure(exercise: widget.exercise),
-          const SizedBox(height: 10),
-          // Step dots.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              for (var i = 0; i < steps.length; i++) ...[
-                if (i > 0) const SizedBox(width: 6),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: i == _step ? 20 : 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: i == _step ? c.accent : c.border,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 18),
-          // Step content.
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: c.accentSoft,
-              border: Border.all(color: c.accent.withValues(alpha: 0.3)),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
+          // Swipe left/right anywhere over the figure and step to move
+          // between steps — the Prev/Next buttons do the same.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragEnd: (details) {
+              final v = details.primaryVelocity ?? 0;
+              if (v < -100) {
+                _setStep(_step + 1);
+              } else if (v > 100) {
+                _setStep(_step - 1);
+              }
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: c.accent,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '${_step + 1}',
-                    style: AppTheme.display(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
-                  ),
+                // Figure area — flips between the start and end frame so the
+                // movement reads as animated. Falls back to the icon if the
+                // photos are missing or fail to load.
+                _DemoFigure(exercise: widget.exercise),
+                const SizedBox(height: 10),
+                // Step dots.
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (var i = 0; i < steps.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () => _setStep(i),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: i == _step ? 20 : 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: i == _step ? c.accent : c.border,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    steps[_step],
-                    style: TextStyle(color: c.textPrimary, fontSize: 14, height: 1.4),
+                const SizedBox(height: 18),
+                // Step content, animated so a swipe reads as a page change.
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0.08, 0),
+                        end: Offset.zero,
+                      ).animate(anim),
+                      child: child,
+                    ),
+                  ),
+                  child: Container(
+                    key: ValueKey(_step),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: c.accentSoft,
+                      border: Border.all(color: c.accent.withValues(alpha: 0.3)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: c.accent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${_step + 1}',
+                            style: AppTheme.display(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            steps[_step],
+                            style: TextStyle(
+                                color: c.textPrimary, fontSize: 14, height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -889,7 +934,7 @@ class _DemoSheetState extends State<_DemoSheet> {
                   fg: c.textSecondary,
                   border: c.border,
                   enabled: _step > 0,
-                  onTap: () => setState(() => _step--),
+                  onTap: () => _setStep(_step - 1),
                 ),
               ),
               const SizedBox(width: 12),
@@ -907,7 +952,7 @@ class _DemoSheetState extends State<_DemoSheet> {
                         label: 'Next →',
                         bg: c.accent,
                         fg: Colors.white,
-                        onTap: () => setState(() => _step++),
+                        onTap: () => _setStep(_step + 1),
                       ),
               ),
             ],
