@@ -119,6 +119,13 @@ void main() {
       expect(back.maxAltitude, 720);
     });
 
+    test('estimates steps from distance and formats them', () {
+      // ~0.75 m stride → about 1,333 steps per km.
+      expect(_run(metres: 1000).estimatedSteps, closeTo(1333, 1));
+      expect(formatSteps(1333), '1,333');
+      expect(formatSteps(742), '742');
+    });
+
     test('calories reflect the activity type and climb', () {
       RunRecord make(ActivityType type, {double gain = 0}) => RunRecord(
             id: 't',

@@ -104,6 +104,11 @@ class RunRecord {
   int get estimatedCalories =>
       (distanceKm * activityType.kcalPerKm + elevationGainMeters * 0.5).round();
 
+  /// Rough step estimate from distance, using an average walking stride of
+  /// ~0.75 m (about 1,300 steps per km). Deterministic and labelled as an
+  /// estimate in the UI — there is no pedometer sensor behind it.
+  int get estimatedSteps => (distanceMeters / 0.75).round();
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'startedAt': startedAt.toIso8601String(),
@@ -144,6 +149,17 @@ String formatDuration(Duration d) {
   final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
   final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
   return h > 0 ? '$h:$m:$s' : '$m:$s';
+}
+
+/// A step count with thousands separators, e.g. 1,342.
+String formatSteps(int steps) {
+  final s = steps.toString();
+  final buf = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+    buf.write(s[i]);
+  }
+  return buf.toString();
 }
 
 /// Pace as m:ss, or -- when there is not enough distance to judge.

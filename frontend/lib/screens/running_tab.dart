@@ -513,6 +513,8 @@ class _RunCardState extends State<_RunCard> {
                     if (run.activityType == ActivityType.hike)
                       _stat(context, 'ELEV GAIN',
                           '${run.elevationGainMeters.round()} m')
+                    else if (run.activityType == ActivityType.walk)
+                      _stat(context, 'STEPS', formatSteps(run.estimatedSteps))
                     else
                       _stat(context, 'PACE', '${formatPace(run.paceSecondsPerKm)}/km'),
                     const SizedBox(width: 8),
@@ -681,6 +683,9 @@ class _LiveTracker extends StatelessWidget {
                       if (tracker.activityType == ActivityType.hike)
                         _liveStat(context, 'ELEV',
                             '${tracker.elevationGainMeters.round()}', 'm ↑')
+                      else if (tracker.activityType == ActivityType.walk)
+                        _liveStat(context, 'STEPS',
+                            formatSteps(tracker.estimatedSteps), 'est.')
                       else
                         _liveStat(
                             context, 'CAL', '${tracker.estimatedCalories}', 'est.'),
@@ -923,8 +928,12 @@ class _SummaryState extends State<_Summary> {
             const SizedBox(height: 12),
             Row(
               children: [
-                _card(context, '⚡', 'Avg pace',
-                    '${formatPace(run.paceSecondsPerKm)} /km'),
+                if (run.activityType == ActivityType.walk)
+                  _card(context, '👣', 'Steps',
+                      '~${formatSteps(run.estimatedSteps)}')
+                else
+                  _card(context, '⚡', 'Avg pace',
+                      '${formatPace(run.paceSecondsPerKm)} /km'),
                 const SizedBox(width: 12),
                 _card(context, '🔥', 'Calories', '~${run.estimatedCalories} kcal'),
               ],

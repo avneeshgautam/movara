@@ -32,6 +32,14 @@ class OverlayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The middle stat is the activity's signature figure: steps for a walk,
+    // elevation for a hike, pace otherwise.
+    final (midLabel, midValue) = switch (run.activityType) {
+      ActivityType.walk => ('STEPS', formatSteps(run.estimatedSteps)),
+      ActivityType.hike => ('ELEV', '${run.elevationGainMeters.round()} m'),
+      _ => ('PACE', '${formatPace(run.paceSecondsPerKm)} /km'),
+    };
+
     return RepaintBoundary(
       key: boundaryKey,
       child: SizedBox(
@@ -105,9 +113,7 @@ class OverlayCard extends StatelessWidget {
                           child: _stat(
                               'DISTANCE', '${run.distanceKm.toStringAsFixed(2)} km')),
                       _divider(),
-                      Expanded(
-                          child: _stat(
-                              'PACE', '${formatPace(run.paceSecondsPerKm)} /km')),
+                      Expanded(child: _stat(midLabel, midValue)),
                       _divider(),
                       Expanded(
                           child: _stat('TIME', formatDuration(run.elapsed))),
