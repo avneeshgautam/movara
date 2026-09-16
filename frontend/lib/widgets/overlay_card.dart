@@ -60,12 +60,12 @@ class OverlayCard extends StatelessWidget {
                     ).copyWith(shadows: _shadows),
                   ),
                   const SizedBox(height: 3),
-                  Text(
+                  const Text(
                     'By Avneesh Gautam',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
+                      color: Color(0xFFF97316), // brand orange
                       fontSize: 11,
-                      fontWeight: FontWeight.w400,
+                      fontWeight: FontWeight.w600,
                       letterSpacing: 0.5,
                       shadows: _shadows,
                     ),
@@ -79,10 +79,15 @@ class OverlayCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  // 2. The route in the middle.
+                  // 2. The route in the middle — kept a touch smaller so the
+                  // wordmark and stats have room to breathe.
                   Expanded(
                     child: run.route.length > 1
-                        ? RoutePath(route: run.route, color: accent, strokeWidth: 6)
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 28),
+                            child: RoutePath(
+                                route: run.route, color: accent, strokeWidth: 6),
+                          )
                         : Center(
                             child: Text(
                               'No route recorded',

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/run_record.dart';
 import '../services/run_store.dart';
@@ -1265,6 +1266,90 @@ class _OverlayPreviewState extends State<_OverlayPreview> {
   bool _busy = false;
   String? _error;
 
+  /// The map/route colour the user can pick, remembered across sessions.
+  static const _colorPrefKey = 'overlay_route_color';
+  static const _routeColors = <(String, Color)>[
+    ('Orange', Color(0xFFF97316)),
+    ('Yellow', Color(0xFFFACC15)),
+    ('Green', Color(0xFF22C55E)),
+    ('Blue', Color(0xFF3B82F6)),
+    ('White', Color(0xFFFFFFFF)),
+    ('Black', Color(0xFF111827)),
+  ];
+  Color _routeColor = const Color(0xFFF97316);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadColor();
+  }
+
+  Future<void> _loadColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getInt(_colorPrefKey);
+    if (v != null && mounted) setState(() => _routeColor = Color(v));
+  }
+
+  Future<void> _setColor(Color color) async {
+    setState(() => _routeColor = color);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_colorPrefKey, color.toARGB32());
+  }
+
+  Widget _colorPicker() {
+    return SizedBox(
+      width: OverlayCard.width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('MAP COLOUR',
+              style: TextStyle(
+                  color: Colors.white70, fontSize: 10, letterSpacing: 1.4)),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (final (name, color) in _routeColors)
+                GestureDetector(
+                  onTap: () => _setColor(color),
+                  child: Semantics(
+                    label: name,
+                    selected: color.toARGB32() == _routeColor.toARGB32(),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: color.toARGB32() == _routeColor.toARGB32()
+                              ? Colors.white
+                              : Colors.white24,
+                          width: color.toARGB32() == _routeColor.toARGB32()
+                              ? 2.5
+                              : 1,
+                        ),
+                      ),
+                      child: Container(
+                        width: 26,
+                        height: 26,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: Colors.black.withValues(alpha: 0.15)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _pickPhoto(ImageSource source) async {
     try {
       final picked =
@@ -1392,10 +1477,12 @@ class _OverlayPreviewState extends State<_OverlayPreview> {
                   run: widget.run,
                   boundaryKey: _cardKey,
                   photo: _photo,
-                  accent: c.blue,
+                  accent: _routeColor,
                 ),
               ),
             ),
+            const SizedBox(height: 14),
+            _colorPicker(),
             const SizedBox(height: 14),
             if (_error != null) ...[
               Text(_error!,
