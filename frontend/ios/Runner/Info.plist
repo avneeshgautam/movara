@@ -39,6 +39,10 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Movara uses the camera so you can put a photo behind your run overlay.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Movara reads your heart rate and steps from Apple Health so your activities show real watch data.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Movara can save your activities to Apple Health.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Movara keeps tracking your route while the app is in the background so your run is recorded with the screen off.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

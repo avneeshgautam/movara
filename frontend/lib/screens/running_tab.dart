@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/run_record.dart';
+import '../services/health_service.dart';
 import '../services/run_store.dart';
 import '../services/run_tracker.dart';
 import '../services/share_image.dart';
@@ -36,18 +38,63 @@ class _RunningTabState extends State<RunningTab> {
   _Screen _screen = _Screen.feed;
   RunRecord? _finished;
 
+  static const _healthPrefKey = 'health_connected';
+  bool _healthConnected = false;
+  Timer? _hrTimer;
+  int? _liveHr;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHealthFlag();
+  }
+
   @override
   void dispose() {
+    _hrTimer?.cancel();
     _tracker.dispose();
     super.dispose();
   }
 
+  Future<void> _loadHealthFlag() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() =>
+          _healthConnected = prefs.getBool(_healthPrefKey) ?? false);
+    }
+  }
+
+  Future<void> _connectHealth() async {
+    final granted = await HealthService.instance.requestPermission();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_healthPrefKey, granted);
+    if (!mounted) return;
+    setState(() => _healthConnected = granted);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(granted
+          ? 'Apple Health connected — heart rate & steps will appear.'
+          : 'Health access was not granted. You can enable it in Settings › Health.'),
+    ));
+  }
+
   Future<void> _startRun(ActivityType type) async {
-    setState(() => _screen = _Screen.live);
+    setState(() {
+      _screen = _Screen.live;
+      _liveHr = null;
+    });
     await _tracker.start(type: type);
+    // Poll Apple Health for the latest heart rate while recording.
+    if (_healthConnected && HealthService.instance.isSupported) {
+      _hrTimer?.cancel();
+      _hrTimer = Timer.periodic(const Duration(seconds: 6), (_) async {
+        final hr = await HealthService.instance.latestHeartRate();
+        if (mounted) setState(() => _liveHr = hr);
+      });
+    }
   }
 
   void _finishRun() {
+    _hrTimer?.cancel();
     final run = _tracker.finish();
     if (run == null) {
       setState(() => _screen = _Screen.feed);
@@ -60,9 +107,11 @@ class _RunningTabState extends State<RunningTab> {
   }
 
   void _discardRun() {
+    _hrTimer?.cancel();
     _tracker.discard();
     setState(() {
       _finished = null;
+      _liveHr = null;
       _screen = _Screen.feed;
     });
   }
@@ -83,9 +132,15 @@ class _RunningTabState extends State<RunningTab> {
     return Container(
       color: c.bg,
       child: switch (_screen) {
-        _Screen.feed => _Feed(store: widget.store, onRecord: _startRun),
+        _Screen.feed => _Feed(
+            store: widget.store,
+            onRecord: _startRun,
+            healthConnected: _healthConnected,
+            onConnectHealth: _connectHealth,
+          ),
         _Screen.live => _LiveTracker(
             tracker: _tracker,
+            heartRate: _liveHr,
             onFinish: _finishRun,
             onDiscard: _discardRun,
           ),
@@ -102,10 +157,17 @@ class _RunningTabState extends State<RunningTab> {
 // ── Feed ────────────────────────────────────────────────────────────
 
 class _Feed extends StatelessWidget {
-  const _Feed({required this.store, required this.onRecord});
+  const _Feed({
+    required this.store,
+    required this.onRecord,
+    required this.healthConnected,
+    required this.onConnectHealth,
+  });
 
   final RunStore store;
   final void Function(ActivityType) onRecord;
+  final bool healthConnected;
+  final VoidCallback onConnectHealth;
 
   static const _weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -190,6 +252,10 @@ class _Feed extends StatelessWidget {
             const SizedBox(height: 18),
 
             _recordButton(context),
+            if (HealthService.instance.isSupported) ...[
+              const SizedBox(height: 12),
+              _healthButton(context),
+            ],
             const SizedBox(height: 20),
 
             // Weekly totals, from real runs.
@@ -377,6 +443,52 @@ class _Feed extends StatelessWidget {
                     style: TextStyle(color: Colors.white70, fontSize: 11)),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _healthButton(BuildContext context) {
+    final c = context.movara;
+    final connected = healthConnected;
+    return GestureDetector(
+      onTap: connected ? null : onConnectHealth,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+        decoration: BoxDecoration(
+          color: c.surface,
+          border: Border.all(
+              color: connected ? c.green.withValues(alpha: 0.5) : c.border),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Icon(connected ? Icons.favorite : Icons.watch_outlined,
+                size: 18, color: connected ? c.green : c.accent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(connected ? 'Apple Health connected' : 'Connect Apple Watch',
+                      style: AppTheme.display(
+                          color: c.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 1),
+                  Text(
+                      connected
+                          ? 'Heart rate & real steps from Health'
+                          : 'Pull heart rate & steps from Apple Health',
+                      style: TextStyle(color: c.textMuted, fontSize: 11)),
+                ],
+              ),
+            ),
+            if (!connected)
+              Icon(Icons.chevron_right, size: 18, color: c.textMuted)
+            else
+              Icon(Icons.check_circle, size: 18, color: c.green),
           ],
         ),
       ),
@@ -601,11 +713,15 @@ class _RunCardState extends State<_RunCard> {
 class _LiveTracker extends StatelessWidget {
   const _LiveTracker({
     required this.tracker,
+    required this.heartRate,
     required this.onFinish,
     required this.onDiscard,
   });
 
   final RunTracker tracker;
+
+  /// Latest heart rate from Apple Health, or null when not connected.
+  final int? heartRate;
   final VoidCallback onFinish;
   final VoidCallback onDiscard;
 
@@ -664,11 +780,27 @@ class _LiveTracker extends StatelessWidget {
                               )),
                         ],
                       ),
-                      Text(formatDuration(tracker.elapsed),
-                          style: AppTheme.display(
-                              color: c.textPrimary,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800)),
+                  Row(
+                        children: [
+                          if (heartRate != null) ...[
+                            Icon(Icons.favorite, size: 15, color: c.accent),
+                            const SizedBox(width: 4),
+                            Text('$heartRate',
+                                style: AppTheme.display(
+                                    color: c.textPrimary,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800)),
+                            Text(' bpm',
+                                style: TextStyle(color: c.textMuted, fontSize: 10)),
+                            const SizedBox(width: 12),
+                          ],
+                          Text(formatDuration(tracker.elapsed),
+                              style: AppTheme.display(
+                                  color: c.textPrimary,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w800)),
+                        ],
+                      ),
                     ],
                   ),
                   const SizedBox(height: 14),
@@ -842,6 +974,31 @@ class _Summary extends StatefulWidget {
 }
 
 class _SummaryState extends State<_Summary> {
+  int? _avgHr;
+  int? _realSteps;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHealth();
+  }
+
+  /// Pulls the average heart rate and real step count for this activity's
+  /// time window from Apple Health, when connected.
+  Future<void> _loadHealth() async {
+    if (!HealthService.instance.isSupported) return;
+    final run = widget.run;
+    final start = run.startedAt;
+    final end = run.startedAt.add(run.elapsed);
+    final hr = await HealthService.instance.averageHeartRate(start, end);
+    final steps = await HealthService.instance.steps(start, end);
+    if (!mounted) return;
+    setState(() {
+      _avgHr = hr;
+      _realSteps = steps;
+    });
+  }
+
   /// Shows the card the user is about to share, then saves it. Rendering it
   /// on screen (rather than offscreen) also gives the map tiles time to load,
   /// so the saved image is never a half-drawn map.
@@ -930,7 +1087,9 @@ class _SummaryState extends State<_Summary> {
               children: [
                 if (run.activityType == ActivityType.walk)
                   _card(context, '👣', 'Steps',
-                      '~${formatSteps(run.estimatedSteps)}')
+                      _realSteps != null
+                          ? formatSteps(_realSteps!)
+                          : '~${formatSteps(run.estimatedSteps)}')
                 else
                   _card(context, '⚡', 'Avg pace',
                       '${formatPace(run.paceSecondsPerKm)} /km'),
@@ -938,6 +1097,14 @@ class _SummaryState extends State<_Summary> {
                 _card(context, '🔥', 'Calories', '~${run.estimatedCalories} kcal'),
               ],
             ),
+            if (_avgHr != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _card(context, '❤️', 'Avg heart rate', '$_avgHr bpm'),
+                ],
+              ),
+            ],
             if (run.activityType == ActivityType.hike) ...[
               const SizedBox(height: 12),
               Row(

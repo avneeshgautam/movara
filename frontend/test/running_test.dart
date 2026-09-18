@@ -609,6 +609,13 @@ void main() {
     });
 
     testWidgets('deleting a run clears it from the feed', (tester) async {
+      // Tall viewport so the whole feed (record + connect buttons, weekly
+      // card, run card) fits and the delete button is tappable.
+      tester.view.physicalSize = const Size(1200, 3200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       await pump(tester, [_run(id: 'a')]);
       expect(find.text('No activities yet'), findsNothing);
 
