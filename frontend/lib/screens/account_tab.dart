@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/workout_entry.dart';
 import '../services/api_service.dart';
+import '../services/health_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 
@@ -814,6 +816,8 @@ class _AccountTabState extends State<AccountTab> {
       (
         title: 'Health',
         items: [
+          _MenuAction('⌚', 'Apple Watch & Health',
+              onTap: () => _connectAppleHealth(context)),
           _MenuAction('❤️', 'Heart Rate Zones',
               onTap: () => _comingSoon(context, 'Heart rate zones')),
           _MenuAction('🩺', 'Health Metrics',
@@ -827,8 +831,8 @@ class _AccountTabState extends State<AccountTab> {
           _MenuAction('💧', 'Water Reminders',
               onTap: () => widget.onOpenTab?.call(3)),
           _MenuAction('🔒', 'Privacy', onTap: () => _showPrivacy(context)),
-          _MenuAction('🔗', 'Connected Apps',
-              onTap: () => _comingSoon(context, 'Connected apps')),
+          _MenuAction('⬇️', 'Download App',
+              onTap: () => _showDownloadApp(context)),
           _MenuAction('ℹ️', 'About Movara', onTap: () => _showAbout(context)),
           _MenuAction('🚪', 'Sign Out',
               onTap: () => widget.onSignOut?.call(), danger: true),
@@ -946,6 +950,163 @@ class _AccountTabState extends State<AccountTab> {
         ],
       ),
     );
+  }
+
+  /// Requests Apple Health access so heart rate and steps from the Apple
+  /// Watch flow into activities. The connection lives in Apple Health — the
+  /// watch writes to Health and Movara reads it.
+  Future<void> _connectAppleHealth(BuildContext context) async {
+    final c = context.movara;
+    if (!HealthService.instance.isSupported) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: c.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Apple Watch & Health',
+              style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+          content: Text(
+            'Apple Health lives on your iPhone. Open Movara on the iPhone app '
+            'to connect your Apple Watch — it is not available in the web app.',
+            style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('OK', style: TextStyle(color: c.accent))),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final granted = await HealthService.instance.requestPermission();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('health_connected', granted);
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(granted ? 'Apple Watch connected' : 'Health access needed',
+            style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+        content: Text(
+          granted
+              ? 'Your heart rate and steps from Apple Health (and your Apple '
+                  'Watch) will now show on your runs, walks and hikes.'
+              : 'Movara could not read Apple Health. Turn it on in the iPhone '
+                  'Settings › Health › Data Access & Devices › Movara, then '
+                  'try again.',
+          style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK', style: TextStyle(color: c.accent))),
+        ],
+      ),
+    );
+  }
+
+  /// Where to get the app: the Android APK now, the stores later.
+  Future<void> _showDownloadApp(BuildContext context) async {
+    final c = context.movara;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Download Movara',
+            style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _downloadRow(context,
+                icon: '🌐',
+                label: 'Open the web app',
+                sub: 'Works now — any device',
+                onTap: () {
+                  Navigator.pop(context);
+                  _launch(_webUrl);
+                }),
+            const SizedBox(height: 8),
+            _downloadRow(context,
+                icon: '🤖', label: 'Android APK', sub: 'Coming soon'),
+            const SizedBox(height: 8),
+            _downloadRow(context,
+                icon: '▶️', label: 'Google Play', sub: 'Coming soon'),
+            const SizedBox(height: 8),
+            _downloadRow(context,
+                icon: '', label: 'App Store', sub: 'Coming soon'),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Close', style: TextStyle(color: c.accent))),
+        ],
+      ),
+    );
+  }
+
+  Widget _downloadRow(BuildContext context,
+      {required String icon,
+      required String label,
+      required String sub,
+      VoidCallback? onTap}) {
+    final c = context.movara;
+    final enabled = onTap != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: c.surface2,
+            border: Border.all(
+                color: enabled ? c.accent.withValues(alpha: 0.4) : c.border),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Text(icon.isEmpty ? '🍎' : icon,
+                  style: const TextStyle(fontSize: 18)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: AppTheme.display(
+                            color: c.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700)),
+                    Text(sub,
+                        style: TextStyle(color: c.textMuted, fontSize: 11)),
+                  ],
+                ),
+              ),
+              if (enabled)
+                Icon(Icons.download, size: 18, color: c.accent)
+              else
+                Icon(Icons.hourglass_empty, size: 16, color: c.textMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static const _webUrl = 'https://movara-9ol-84z.pages.dev';
+
+  Future<void> _launch(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _showPrivacy(BuildContext context) async {
