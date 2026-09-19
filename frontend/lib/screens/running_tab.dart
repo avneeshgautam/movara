@@ -697,9 +697,9 @@ class _RunCardState extends State<_RunCard> {
 
 // ── Ready screen ────────────────────────────────────────────────────
 
-/// Shown after choosing an activity: confirms the pick and waits for a Start
-/// tap before any GPS tracking begins.
-class _ReadyScreen extends StatelessWidget {
+/// Shown after choosing an activity: a 3-second countdown, then recording
+/// begins automatically. Tapping Cancel goes back to the chooser.
+class _ReadyScreen extends StatefulWidget {
   const _ReadyScreen({
     required this.type,
     required this.onStart,
@@ -710,12 +710,32 @@ class _ReadyScreen extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onCancel;
 
-  String get _blurb => switch (type) {
-        ActivityType.run => 'Maps your route and tracks pace, time and calories.',
-        ActivityType.walk => 'Maps your route and tracks steps, time and calories.',
-        ActivityType.hike =>
-          'Maps your route and tracks elevation gain, time and calories.',
-      };
+  @override
+  State<_ReadyScreen> createState() => _ReadyScreenState();
+}
+
+class _ReadyScreenState extends State<_ReadyScreen> {
+  int _count = 3;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      setState(() => _count--);
+      if (_count <= 0) {
+        t.cancel();
+        widget.onStart();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -726,100 +746,67 @@ class _ReadyScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Back to the chooser.
-            Align(
-              alignment: Alignment.centerLeft,
-              child: GestureDetector(
-                onTap: onCancel,
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.chevron_left, color: c.textMuted, size: 20),
-                      Text('Change',
-                          style: TextStyle(color: c.textMuted, fontSize: 13)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            const SizedBox(height: 8),
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  Text(widget.type.emoji, style: const TextStyle(fontSize: 40)),
+                  const SizedBox(height: 8),
+                  Text('STARTING ${widget.type.label.toUpperCase()}',
+                      style: TextStyle(
+                          color: c.textMuted, fontSize: 11, letterSpacing: 1.8)),
+                  const SizedBox(height: 16),
+                  // The big countdown number.
                   Container(
-                    width: 96,
-                    height: 96,
+                    width: 150,
+                    height: 150,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: c.accentSoft,
                       shape: BoxShape.circle,
-                      border: Border.all(color: c.accent.withValues(alpha: 0.4)),
+                      border: Border.all(
+                          color: c.accent.withValues(alpha: 0.5), width: 2),
                     ),
-                    child: Text(type.emoji, style: const TextStyle(fontSize: 46)),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      transitionBuilder: (child, anim) =>
+                          ScaleTransition(scale: anim, child: child),
+                      child: Text(
+                        _count > 0 ? '$_count' : 'GO',
+                        key: ValueKey(_count),
+                        style: AppTheme.display(
+                            color: c.accent,
+                            fontSize: _count > 0 ? 72 : 52,
+                            fontWeight: FontWeight.w800),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 18),
-                  Text('READY TO GO',
-                      style: TextStyle(
-                          color: c.textMuted, fontSize: 10, letterSpacing: 1.8)),
-                  const SizedBox(height: 4),
-                  Text(type.label,
-                      style: AppTheme.display(
-                          color: c.textPrimary,
-                          fontSize: 30,
-                          fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 10),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Text(_blurb,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            color: c.textSecondary, fontSize: 13, height: 1.4)),
-                  ),
+                  const SizedBox(height: 16),
+                  Text('Get ready — location starts automatically.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: c.textSecondary, fontSize: 13)),
                 ],
               ),
             ),
-            // Start button.
+            // Cancel goes back to the chooser.
             GestureDetector(
-              onTap: onStart,
+              onTap: widget.onCancel,
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 18),
+                padding: const EdgeInsets.symmetric(vertical: 15),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [const Color(0xFFC2410C), c.accent],
-                  ),
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                        color: c.accentGlow,
-                        blurRadius: 22,
-                        offset: const Offset(0, 6)),
-                  ],
+                  color: c.surface2,
+                  border: Border.all(color: c.border),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.play_arrow_rounded,
-                        color: Colors.white, size: 22),
-                    const SizedBox(width: 6),
-                    Text('Start ${type.label}',
-                        style: AppTheme.display(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800)),
-                  ],
-                ),
+                child: Text('Cancel',
+                    style: AppTheme.display(
+                        color: c.textSecondary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700)),
               ),
             ),
-            const SizedBox(height: 8),
-            Text('Location starts when you tap Start.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: c.textMuted, fontSize: 11)),
           ],
         ),
       ),
