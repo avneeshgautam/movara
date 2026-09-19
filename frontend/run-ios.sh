@@ -49,8 +49,12 @@ if [ -z "$DEVICE" ]; then
   exit 1
 fi
 
-echo "==> Installing to $DEVICE"
-flutter install --release -d "$DEVICE"
+echo "==> Installing to $DEVICE (upgrade in place — keeps your saved data)"
+# `flutter install` uninstalls the old app first, which wipes local data
+# (your recorded activities live in the app container). devicectl does an
+# upgrade install that preserves the container, so history survives updates.
+xcrun devicectl device install app --device "$DEVICE" \
+  build/ios/iphoneos/Runner.app
 
 # flutter install can report success having done nothing, so confirm.
 if xcrun devicectl device info apps --device "$DEVICE" 2>/dev/null \
