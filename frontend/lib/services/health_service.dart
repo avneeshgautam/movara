@@ -44,9 +44,13 @@ class HealthService {
     try {
       final points = await _health.getHealthDataFromTypes(
           now.subtract(within), now, [HealthDataType.HEART_RATE]);
-      if (points.isEmpty) return null;
-      points.sort((a, b) => a.dateTo.compareTo(b.dateTo));
-      return points.last.value.round();
+      final valid = points.where((p) {
+        final v = p.value.toDouble();
+        return v.isFinite && v > 0;
+      }).toList();
+      if (valid.isEmpty) return null;
+      valid.sort((a, b) => a.dateTo.compareTo(b.dateTo));
+      return valid.last.value.round();
     } catch (_) {
       return null;
     }
@@ -58,23 +62,33 @@ class HealthService {
     try {
       final points = await _health
           .getHealthDataFromTypes(start, end, [HealthDataType.HEART_RATE]);
-      if (points.isEmpty) return null;
-      final total = points.fold<double>(0, (sum, p) => sum + p.value.toDouble());
-      return (total / points.length).round();
+      // Keep only sane readings — some sources emit 0 or garbage samples.
+      final values = points
+          .map((p) => p.value.toDouble())
+          .where((v) => v.isFinite && v > 0)
+          .toList();
+      if (values.isEmpty) return null;
+      final avg = values.reduce((a, b) => a + b) / values.length;
+      return avg.round();
     } catch (_) {
       return null;
     }
   }
 
-  /// Total real steps between two times (deduplicated by the plugin), or null.
+  /// Total real steps between two times, or null. Overlapping samples from
+  /// several sources (iPhone + Watch) can carry corrections, so only positive,
+  /// finite counts are summed and the total is never returned negative.
   Future<int?> steps(DateTime start, DateTime end) async {
     if (!isSupported) return null;
     try {
       final points =
           await _health.getHealthDataFromTypes(start, end, [HealthDataType.STEPS]);
-      if (points.isEmpty) return null;
-      final total = points.fold<double>(0, (sum, p) => sum + p.value.toDouble());
-      return total.round();
+      final total = points.fold<double>(0, (sum, p) {
+        final v = p.value.toDouble();
+        return (v.isFinite && v > 0) ? sum + v : sum;
+      });
+      final rounded = total.round();
+      return rounded > 0 ? rounded : null;
     } catch (_) {
       return null;
     }

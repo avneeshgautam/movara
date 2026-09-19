@@ -126,6 +126,12 @@ void main() {
       expect(formatSteps(742), '742');
     });
 
+    test('steps are never negative', () {
+      expect(_run(metres: 0).estimatedSteps, 0);
+      // A guard against any bad upstream value ever rendering a minus sign.
+      expect(formatSteps(-50), '0');
+    });
+
     test('calories reflect the activity type and climb', () {
       RunRecord make(ActivityType type, {double gain = 0}) => RunRecord(
             id: 't',

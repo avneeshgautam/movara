@@ -118,7 +118,8 @@ class RunTracker extends ChangeNotifier {
       (distanceKm * _activityType.kcalPerKm + _elevationGain * 0.5).round();
 
   /// Estimated steps so far, from distance and an average walking stride.
-  int get estimatedSteps => (_distanceMeters / 0.75).round();
+  int get estimatedSteps =>
+      _distanceMeters <= 0 ? 0 : (_distanceMeters / 0.75).round();
 
   Future<void> start({ActivityType type = ActivityType.run}) async {
     _reset();
