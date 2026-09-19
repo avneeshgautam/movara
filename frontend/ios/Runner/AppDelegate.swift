@@ -12,8 +12,7 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "LiveActivityBridge") {
-      LiveActivityBridge.register(with: registrar)
-    }
+    // LiveActivityBridge is wired up once the MovaraLiveActivity extension
+    // target is signed in Xcode; until then it is not compiled in.
   }
 }
