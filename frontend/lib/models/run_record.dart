@@ -101,8 +101,11 @@ class RunRecord {
   /// 0.5 kcal for every metre climbed. Deliberately simple and deterministic
   /// — there is no heart-rate sensor behind it, so it is labelled as an
   /// estimate in the UI.
-  int get estimatedCalories =>
-      (distanceKm * activityType.kcalPerKm + elevationGainMeters * 0.5).round();
+  int get estimatedCalories {
+    final kcal =
+        distanceKm * activityType.kcalPerKm + elevationGainMeters * 0.5;
+    return kcal <= 0 ? 0 : kcal.round();
+  }
 
   /// Rough step estimate from distance, using an average walking stride of
   /// ~0.75 m (about 1,300 steps per km). Deterministic and labelled as an

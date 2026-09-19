@@ -1206,7 +1206,7 @@ class _SummaryState extends State<_Summary> {
               children: [
                 if (run.activityType == ActivityType.walk)
                   _card(context, '👣', 'Steps',
-                      _realSteps != null
+                      (_realSteps != null && _realSteps! > 0)
                           ? formatSteps(_realSteps!)
                           : '~${formatSteps(run.estimatedSteps)}')
                 else
