@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/run_record.dart';
 import '../models/workout_entry.dart';
 import '../services/goal_store.dart';
+import '../services/health_service.dart';
 import '../services/run_store.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
@@ -101,13 +102,12 @@ class HomeTab extends StatelessWidget {
                       unit: 'min',
                     ),
                   ),
-                  // Real: estimated steps across this week's activities.
+                  // Today's real steps from Apple Health when connected,
+                  // otherwise this week's steps estimated from activities.
                   const SizedBox(width: 10),
                   Expanded(
-                    child: MiniStat(
-                      label: 'Steps',
-                      value: formatSteps(runStore.stepsThisWeek()),
-                      unit: 'wk',
+                    child: _StepsStat(
+                      weeklyEstimate: runStore.stepsThisWeek(),
                     ),
                   ),
                 ],
@@ -536,6 +536,46 @@ class _GoalDialogState extends State<_GoalDialog> {
         focusedBorder:
             UnderlineInputBorder(borderSide: BorderSide(color: c.accent)),
       ),
+    );
+  }
+}
+
+/// The Home steps tile: shows today's real steps from Apple Health when it is
+/// connected, otherwise falls back to steps estimated from this week's logged
+/// activities. Reads once when the tab is built.
+class _StepsStat extends StatefulWidget {
+  const _StepsStat({required this.weeklyEstimate});
+
+  final int weeklyEstimate;
+
+  @override
+  State<_StepsStat> createState() => _StepsStatState();
+}
+
+class _StepsStatState extends State<_StepsStat> {
+  int? _today;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (!HealthService.instance.isSupported) return;
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final steps = await HealthService.instance.steps(start, now);
+    if (mounted && steps != null) setState(() => _today = steps);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final today = _today;
+    return MiniStat(
+      label: 'Steps',
+      value: formatSteps(today ?? widget.weeklyEstimate),
+      unit: today != null ? 'today' : 'wk',
     );
   }
 }
