@@ -589,12 +589,22 @@ void main() {
       await pump(tester, []);
 
       expect(find.text('No activities yet'), findsOneWidget);
-      expect(find.text('Record Activity'), findsOneWidget);
+      // The three inline activity choices are shown, not a single button.
+      expect(find.text('RECORD ACTIVITY'), findsOneWidget);
+      expect(find.text('Run'), findsOneWidget);
+      expect(find.text('Walk'), findsOneWidget);
+      expect(find.text('Hike'), findsOneWidget);
       // Nothing may be presented as a personal best before anything is run.
       expect(find.text('YOUR BESTS'), findsNothing);
     });
 
     testWidgets('shows the figures from a recorded run', (tester) async {
+      // Tall viewport so the run card and the personal-best tiles both build.
+      tester.view.physicalSize = const Size(1200, 3200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       await pump(tester, [
         _run(id: 'a', at: DateTime(2026, 9, 5, 7), seconds: 1800, metres: 5000),
       ]);

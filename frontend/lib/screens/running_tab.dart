@@ -31,7 +31,7 @@ class RunningTab extends StatefulWidget {
   State<RunningTab> createState() => _RunningTabState();
 }
 
-enum _Screen { feed, live, summary }
+enum _Screen { feed, ready, live, summary }
 
 class _RunningTabState extends State<RunningTab> {
   final _tracker = RunTracker();
@@ -42,6 +42,10 @@ class _RunningTabState extends State<RunningTab> {
   bool _healthConnected = false;
   Timer? _hrTimer;
   int? _liveHr;
+
+  /// The activity chosen on the feed, shown on the ready screen before the
+  /// GPS actually starts.
+  ActivityType _pendingType = ActivityType.run;
 
   @override
   void initState() {
@@ -77,12 +81,21 @@ class _RunningTabState extends State<RunningTab> {
     ));
   }
 
-  Future<void> _startRun(ActivityType type) async {
+  /// A choice on the feed opens the ready screen; it does not start GPS yet.
+  void _selectActivity(ActivityType type) {
+    setState(() {
+      _pendingType = type;
+      _screen = _Screen.ready;
+    });
+  }
+
+  /// The Start button on the ready screen actually begins recording.
+  Future<void> _beginRecording() async {
     setState(() {
       _screen = _Screen.live;
       _liveHr = null;
     });
-    await _tracker.start(type: type);
+    await _tracker.start(type: _pendingType);
     // Poll Apple Health for the latest heart rate while recording.
     if (_healthConnected && HealthService.instance.isSupported) {
       _hrTimer?.cancel();
@@ -134,9 +147,14 @@ class _RunningTabState extends State<RunningTab> {
       child: switch (_screen) {
         _Screen.feed => _Feed(
             store: widget.store,
-            onRecord: _startRun,
+            onRecord: _selectActivity,
             healthConnected: _healthConnected,
             onConnectHealth: _connectHealth,
+          ),
+        _Screen.ready => _ReadyScreen(
+            type: _pendingType,
+            onStart: _beginRecording,
+            onCancel: () => setState(() => _screen = _Screen.feed),
           ),
         _Screen.live => _LiveTracker(
             tracker: _tracker,
@@ -171,61 +189,72 @@ class _Feed extends StatelessWidget {
 
   static const _weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-  /// Pops the Run / Walk / Hike chooser, then starts recording the pick.
-  Future<void> _chooseActivity(BuildContext context) async {
+  static String _activityBlurb(ActivityType type) => switch (type) {
+        ActivityType.run => 'Pace · calories',
+        ActivityType.walk => 'Steps · calories',
+        ActivityType.hike => 'Elevation · calories',
+      };
+
+  /// The three activity choices, shown inline on the feed. Tapping one opens
+  /// the ready screen (it does not start recording yet).
+  Widget _activityChooser(BuildContext context) {
     final c = context.movara;
-    final type = await showModalBottomSheet<ActivityType>(
-      context: context,
-      backgroundColor: c.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('RECORD ACTIVITY',
+            style: TextStyle(
+                color: c.textMuted, fontSize: 10, letterSpacing: 1.6)),
+        const SizedBox(height: 10),
+        Row(
           children: [
-            const SizedBox(height: 10),
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                    color: c.border, borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
-              child: Text('CHOOSE ACTIVITY',
-                  style: TextStyle(
-                      color: c.textMuted, fontSize: 10, letterSpacing: 1.6)),
-            ),
-            for (final type in ActivityType.values)
-              ListTile(
-                leading: Text(type.emoji, style: const TextStyle(fontSize: 24)),
-                title: Text(type.label,
-                    style: AppTheme.display(
-                        color: c.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700)),
-                subtitle: Text(_activityBlurb(type),
-                    style: TextStyle(color: c.textMuted, fontSize: 11)),
-                trailing: Icon(Icons.chevron_right, color: c.textMuted),
-                onTap: () => Navigator.pop(ctx, type),
-              ),
+            for (final type in ActivityType.values) ...[
+              if (type != ActivityType.values.first)
+                const SizedBox(width: 10),
+              Expanded(child: _activityCard(context, type)),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _activityCard(BuildContext context, ActivityType type) {
+    final c = context.movara;
+    return GestureDetector(
+      onTap: () => onRecord(type),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [const Color(0xFFC2410C), c.accent],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+                color: c.accentGlow, blurRadius: 16, offset: const Offset(0, 5)),
+          ],
+        ),
+        child: Column(
+          children: [
+            Text(type.emoji, style: const TextStyle(fontSize: 28)),
             const SizedBox(height: 8),
+            Text(type.label,
+                style: AppTheme.display(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800)),
+            const SizedBox(height: 2),
+            Text(_activityBlurb(type),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 9.5)),
           ],
         ),
       ),
     );
-    if (type != null) onRecord(type);
   }
-
-  static String _activityBlurb(ActivityType type) => switch (type) {
-        ActivityType.run => 'GPS route · pace · calories',
-        ActivityType.walk => 'GPS route · steps pace · calories',
-        ActivityType.hike => 'GPS route · elevation gain · calories',
-      };
 
   @override
   Widget build(BuildContext context) {
@@ -251,7 +280,7 @@ class _Feed extends StatelessWidget {
                     color: c.textPrimary, fontSize: 24, fontWeight: FontWeight.w800)),
             const SizedBox(height: 18),
 
-            _recordButton(context),
+            _activityChooser(context),
             if (HealthService.instance.isSupported) ...[
               const SizedBox(height: 12),
               _healthButton(context),
@@ -404,48 +433,6 @@ class _Feed extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-
-  Widget _recordButton(BuildContext context) {
-    final c = context.movara;
-    return GestureDetector(
-      onTap: () => _chooseActivity(context),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [const Color(0xFFC2410C), c.accent],
-          ),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(color: c.accentGlow, blurRadius: 24, offset: const Offset(0, 6))
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('🏃', style: TextStyle(fontSize: 22)),
-            const Text('🚶', style: TextStyle(fontSize: 22)),
-            const Text('🥾', style: TextStyle(fontSize: 22)),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Record Activity',
-                    style: AppTheme.display(
-                        color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 2),
-                const Text('Run · Walk · Hike — with GPS route',
-                    style: TextStyle(color: Colors.white70, fontSize: 11)),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -701,6 +688,138 @@ class _RunCardState extends State<_RunCard> {
                 overflow: TextOverflow.ellipsis,
                 style: AppTheme.display(
                     color: c.textPrimary, fontSize: 13, fontWeight: FontWeight.w800)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Ready screen ────────────────────────────────────────────────────
+
+/// Shown after choosing an activity: confirms the pick and waits for a Start
+/// tap before any GPS tracking begins.
+class _ReadyScreen extends StatelessWidget {
+  const _ReadyScreen({
+    required this.type,
+    required this.onStart,
+    required this.onCancel,
+  });
+
+  final ActivityType type;
+  final VoidCallback onStart;
+  final VoidCallback onCancel;
+
+  String get _blurb => switch (type) {
+        ActivityType.run => 'Maps your route and tracks pace, time and calories.',
+        ActivityType.walk => 'Maps your route and tracks steps, time and calories.',
+        ActivityType.hike =>
+          'Maps your route and tracks elevation gain, time and calories.',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Back to the chooser.
+            Align(
+              alignment: Alignment.centerLeft,
+              child: GestureDetector(
+                onTap: onCancel,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.chevron_left, color: c.textMuted, size: 20),
+                      Text('Change',
+                          style: TextStyle(color: c.textMuted, fontSize: 13)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 96,
+                    height: 96,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: c.accentSoft,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: c.accent.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(type.emoji, style: const TextStyle(fontSize: 46)),
+                  ),
+                  const SizedBox(height: 18),
+                  Text('READY TO GO',
+                      style: TextStyle(
+                          color: c.textMuted, fontSize: 10, letterSpacing: 1.8)),
+                  const SizedBox(height: 4),
+                  Text(type.label,
+                      style: AppTheme.display(
+                          color: c.textPrimary,
+                          fontSize: 30,
+                          fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 10),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(_blurb,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: c.textSecondary, fontSize: 13, height: 1.4)),
+                  ),
+                ],
+              ),
+            ),
+            // Start button.
+            GestureDetector(
+              onTap: onStart,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [const Color(0xFFC2410C), c.accent],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                        color: c.accentGlow,
+                        blurRadius: 22,
+                        offset: const Offset(0, 6)),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.play_arrow_rounded,
+                        color: Colors.white, size: 22),
+                    const SizedBox(width: 6),
+                    Text('Start ${type.label}',
+                        style: AppTheme.display(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text('Location starts when you tap Start.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: c.textMuted, fontSize: 11)),
           ],
         ),
       ),
