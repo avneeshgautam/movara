@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/run_record.dart';
 import '../services/health_service.dart';
+import '../services/live_activity.dart';
 import '../services/run_store.dart';
 import '../services/run_tracker.dart';
 import '../services/share_image.dart';
@@ -42,6 +43,7 @@ class _RunningTabState extends State<RunningTab> {
   bool _healthConnected = false;
   Timer? _hrTimer;
   int? _liveHr;
+  Timer? _laTimer; // pushes distance to the Live Activity
 
   /// The activity chosen on the feed, shown on the ready screen before the
   /// GPS actually starts.
@@ -56,6 +58,7 @@ class _RunningTabState extends State<RunningTab> {
   @override
   void dispose() {
     _hrTimer?.cancel();
+    _laTimer?.cancel();
     _tracker.dispose();
     super.dispose();
   }
@@ -96,6 +99,12 @@ class _RunningTabState extends State<RunningTab> {
       _liveHr = null;
     });
     await _tracker.start(type: _pendingType);
+    // Live Activity: a lock-screen / Dynamic Island timer + distance.
+    LiveActivity.start(_pendingType.label, _pendingType.emoji);
+    _laTimer?.cancel();
+    _laTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      LiveActivity.update(_tracker.distanceKm);
+    });
     // Poll Apple Health for the latest heart rate while recording.
     if (_healthConnected && HealthService.instance.isSupported) {
       _hrTimer?.cancel();
@@ -108,6 +117,8 @@ class _RunningTabState extends State<RunningTab> {
 
   void _finishRun() {
     _hrTimer?.cancel();
+    _laTimer?.cancel();
+    LiveActivity.end();
     final run = _tracker.finish();
     if (run == null) {
       setState(() => _screen = _Screen.feed);
@@ -121,6 +132,8 @@ class _RunningTabState extends State<RunningTab> {
 
   void _discardRun() {
     _hrTimer?.cancel();
+    _laTimer?.cancel();
+    LiveActivity.end();
     _tracker.discard();
     setState(() {
       _finished = null;
