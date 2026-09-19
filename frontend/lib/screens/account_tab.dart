@@ -816,8 +816,8 @@ class _AccountTabState extends State<AccountTab> {
       (
         title: 'Health',
         items: [
-          _MenuAction('⌚', 'Apple Watch & Health',
-              onTap: () => _connectAppleHealth(context)),
+          _MenuAction('🔗', 'Connected Apps',
+              onTap: () => _showConnectedApps(context)),
           _MenuAction('❤️', 'Heart Rate Zones',
               onTap: () => _comingSoon(context, 'Heart rate zones')),
           _MenuAction('🩺', 'Health Metrics',
@@ -947,6 +947,104 @@ class _AccountTabState extends State<AccountTab> {
           TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text('OK', style: TextStyle(color: c.accent))),
+        ],
+      ),
+    );
+  }
+
+  /// The list of health/fitness sources. Apple Health is the working hub;
+  /// other watches (like Noise) feed in through it; direct integrations are
+  /// on the roadmap.
+  Future<void> _showConnectedApps(BuildContext context) async {
+    final c = context.movara;
+    final appleSub = HealthService.instance.isSupported
+        ? 'Apple Watch, heart rate & steps'
+        : 'iPhone app only';
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Connected apps',
+            style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _downloadRow(context,
+                    icon: '⌚',
+                    label: 'Apple Health',
+                    sub: appleSub,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _connectAppleHealth(context);
+                    }),
+                const SizedBox(height: 8),
+                _downloadRow(context,
+                    icon: '⌚',
+                    label: 'NoiseFit (Noise)',
+                    sub: 'Syncs via Apple Health',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showNoiseFitHelp(context);
+                    }),
+                const SizedBox(height: 8),
+                _downloadRow(context,
+                    icon: '💪', label: 'Google Fit', sub: 'Coming soon'),
+                const SizedBox(height: 8),
+                _downloadRow(context,
+                    icon: '🚴', label: 'Strava', sub: 'Coming soon'),
+                const SizedBox(height: 8),
+                _downloadRow(context,
+                    icon: '⌚', label: 'Fitbit', sub: 'Coming soon'),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Close', style: TextStyle(color: c.accent))),
+        ],
+      ),
+    );
+  }
+
+  /// How to get a Noise watch's data into Movara (there is no direct NoiseFit
+  /// login — it routes through Apple Health).
+  Future<void> _showNoiseFitHelp(BuildContext context) async {
+    final c = context.movara;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('NoiseFit (Noise)',
+            style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+        content: Text(
+          'Noise watches sync through the NoiseFit app, which shares data with '
+          'Apple Health. To bring it into Movara:\n\n'
+          '1. Open NoiseFit → Profile → Apple Health (or Health permissions).\n'
+          '2. Turn on Steps and Heart Rate.\n'
+          '3. Come back and connect Apple Health here.\n\n'
+          'Movara then reads that shared data — a direct NoiseFit login is not '
+          'available yet.',
+          style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _connectAppleHealth(context);
+              },
+              child: Text('Connect Apple Health',
+                  style: TextStyle(color: c.accent))),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK', style: TextStyle(color: c.textMuted))),
         ],
       ),
     );

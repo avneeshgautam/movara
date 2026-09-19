@@ -101,6 +101,15 @@ class HomeTab extends StatelessWidget {
                       unit: 'min',
                     ),
                   ),
+                  // Real: estimated steps across this week's activities.
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: MiniStat(
+                      label: 'Steps',
+                      value: formatSteps(runStore.stepsThisWeek()),
+                      unit: 'wk',
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 24),

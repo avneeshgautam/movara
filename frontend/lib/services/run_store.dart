@@ -107,6 +107,10 @@ class RunStore extends ChangeNotifier {
 
   int runsThisWeek({DateTime? now}) => _thisWeek(now: now).length;
 
+  /// Estimated steps across every activity recorded this week.
+  int stepsThisWeek({DateTime? now}) =>
+      _thisWeek(now: now).fold<int>(0, (a, r) => a + r.estimatedSteps);
+
   /// Minutes spent running so far this week.
   int activeMinutesThisWeek({DateTime? now}) => _thisWeek(now: now)
       .fold<int>(0, (a, r) => a + r.elapsedSeconds) ~/
