@@ -597,8 +597,8 @@ class _ExerciseCardState extends State<_ExerciseCard> {
     final c = context.movara;
     final s = _sets[i];
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    final row = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         color: s.done ? c.accentSoft : c.surface2,
         border: Border.all(color: s.done ? c.accent.withValues(alpha: 0.35) : c.border),
@@ -606,12 +606,13 @@ class _ExerciseCardState extends State<_ExerciseCard> {
       ),
       child: Row(
         children: [
-          // Done toggle.
+          // Done toggle — opaque hit test so the whole circle is tappable.
           GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: () => _toggleDone(i),
             child: Container(
-              width: 24,
-              height: 24,
+              width: 26,
+              height: 26,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: s.done ? c.accent : c.surface3,
@@ -619,29 +620,30 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                 border: Border.all(color: s.done ? c.accent : c.border, width: 1.5),
               ),
               child: s.done
-                  ? const Icon(Icons.check, size: 14, color: Colors.white)
+                  ? const Icon(Icons.check, size: 15, color: Colors.white)
                   : null,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           SizedBox(
-            width: 42,
+            width: 30,
             child: Text(
-              'Set ${i + 1}',
+              'Set',
               style: AppTheme.display(
                 color: s.done ? c.accent : c.textSecondary,
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
           _roundBtn(context, '−', () => _changeReps(i, -1), c.textSecondary),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: () => _editReps(i),
             child: Container(
-              constraints: const BoxConstraints(minWidth: 34),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              constraints: const BoxConstraints(minWidth: 30),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: c.surface3,
@@ -658,17 +660,18 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           _roundBtn(context, '+', () => _changeReps(i, 1), c.accent),
           const Spacer(),
           // Weight control.
           _roundBtn(context, '−', () => _changeWeight(i, -0.5), c.textSecondary),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: () => _editWeight(i),
             child: Container(
-              width: 50,
-              padding: const EdgeInsets.symmetric(vertical: 3),
+              width: 46,
+              padding: const EdgeInsets.symmetric(vertical: 4),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: c.surface3,
@@ -693,25 +696,40 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           _roundBtn(context, '+', () => _changeWeight(i, 0.5), c.accent),
-          // Removable down to a single set, so 1–2-set workouts are easy.
-          if (_sets.length > 1) ...[
-            const SizedBox(width: 6),
-            _roundBtn(context, '×', () => _removeSet(i), c.textMuted),
-          ],
         ],
       ),
+    );
+
+    // Swipe a set left to delete it (keeping at least one). Replaces the old
+    // inline "×" that was pushed off the right edge on narrow phones.
+    return Dismissible(
+      key: ObjectKey(s),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async => _sets.length > 1,
+      onDismissed: (_) => _removeSet(i),
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 18),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEF4444),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.delete_outline, color: Colors.white, size: 20),
+      ),
+      child: row,
     );
   }
 
   Widget _roundBtn(BuildContext context, String label, VoidCallback onTap, Color fg) {
     final c = context.movara;
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        width: 24,
-        height: 24,
+        width: 26,
+        height: 26,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: c.surface3,
@@ -1033,6 +1051,10 @@ class _ExerciseThumb extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.cover,
+        // Decode down to the thumbnail size so a full-res gym photo doesn't
+        // cost memory/CPU on every card — a big source of list jank.
+        cacheWidth: 180,
+        gaplessPlayback: true,
         errorBuilder: (_, __, ___) => fallback,
         loadingBuilder: (_, child, progress) =>
             progress != null ? fallback : child,
@@ -1095,6 +1117,7 @@ class _DemoFigureState extends State<_DemoFigure> {
           images[_frame.clamp(0, images.length - 1)],
           key: ValueKey(_frame),
           fit: BoxFit.contain,
+          cacheWidth: 500,
           errorBuilder: (_, __, ___) => Center(child: fallback),
           loadingBuilder: (_, child, progress) =>
               progress != null ? Center(child: fallback) : child,
