@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/run_record.dart';
 import '../models/workout_entry.dart';
 import '../services/api_service.dart';
 import '../services/health_service.dart';
@@ -1081,21 +1082,48 @@ class _AccountTabState extends State<AccountTab> {
     final granted = await HealthService.instance.requestPermission();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('health_connected', granted);
+
+    // Prove the read actually works by pulling today's steps right now.
+    int? stepsToday;
+    if (granted) {
+      final now = DateTime.now();
+      stepsToday = await HealthService.instance
+          .steps(DateTime(now.year, now.month, now.day), now);
+    }
     if (!context.mounted) return;
+
+    final String title;
+    final String message;
+    if (!granted) {
+      title = 'Health access needed';
+      message =
+          'Movara could not read Apple Health. Turn it on in the iPhone '
+          'Settings › Health › Data Access & Devices › Movara, then try again.';
+    } else if (stepsToday != null && stepsToday > 0) {
+      title = 'Apple Health connected';
+      message =
+          'Read ${formatSteps(stepsToday)} steps from Apple Health today. '
+          'Your steps and heart rate will now show on Home and your activities.';
+    } else {
+      title = 'Connected, but no steps yet';
+      message =
+          'Movara is connected but Apple Health returned no steps. Check:\n\n'
+          '1. iPhone Settings › Health › Data Access & Devices › Movara — '
+          'turn ON Steps and Heart Rate.\n'
+          '2. In NoiseFit › Profile › Apple Health, turn ON Steps so your '
+          'Noise watch writes to Health.\n\n'
+          'Then reopen Home.';
+    }
+
     await showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: c.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(granted ? 'Apple Watch connected' : 'Health access needed',
+        title: Text(title,
             style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
         content: Text(
-          granted
-              ? 'Your heart rate and steps from Apple Health (and your Apple '
-                  'Watch) will now show on your runs, walks and hikes.'
-              : 'Movara could not read Apple Health. Turn it on in the iPhone '
-                  'Settings › Health › Data Access & Devices › Movara, then '
-                  'try again.',
+          message,
           style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.5),
         ),
         actions: [
