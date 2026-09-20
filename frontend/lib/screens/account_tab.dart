@@ -7,6 +7,7 @@ import '../models/run_record.dart';
 import '../models/workout_entry.dart';
 import '../services/api_service.dart';
 import '../services/health_service.dart';
+import '../services/motivation_reminders.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 
@@ -102,6 +103,40 @@ class _AccountTabState extends State<AccountTab> {
     setState(() => _toggles[key] = value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('toggle_$key', value);
+    if (key == 'Gym Motivation') await _applyGymMotivation(value);
+  }
+
+  /// Schedules (or cancels) the daily 6am wake-up and 5pm gym notifications.
+  Future<void> _applyGymMotivation(bool on) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final reminders = MotivationReminders(widget.api);
+
+    Future<void> revert(String message) async {
+      if (mounted) setState(() => _toggles['Gym Motivation'] = false);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('toggle_Gym Motivation', false);
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    }
+
+    if (!reminders.isSupported) {
+      if (on) {
+        await revert('Motivation reminders work in the iPhone app, not the web.');
+      }
+      return;
+    }
+    if (on) {
+      final status = await reminders.requestPermission();
+      if (status != 'granted') {
+        await revert('Allow notifications to get motivation reminders.');
+        return;
+      }
+      await reminders.enable();
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Motivation set: 6am wake-up & 5pm gym. 💪'),
+      ));
+    } else {
+      await reminders.disable();
+    }
   }
 
   Future<void> _loadBody() async {
@@ -242,6 +277,7 @@ class _AccountTabState extends State<AccountTab> {
   final Map<String, bool> _toggles = {
     'Notifications': true,
     'Sleep Tracking': false,
+    'Gym Motivation': false,
   };
 
   double get _bmi {
@@ -870,6 +906,8 @@ class _AccountTabState extends State<AccountTab> {
               onTap: () => _comingSoon(context, 'Heart rate zones')),
           _MenuAction('🩺', 'Health Metrics',
               onTap: () => _comingSoon(context, 'Health metrics')),
+          _MenuAction('🏋️', 'Gym Motivation · 6am & 5pm',
+              toggleKey: 'Gym Motivation'),
           _MenuAction('😴', 'Sleep Tracking', toggleKey: 'Sleep Tracking'),
         ],
       ),

@@ -53,4 +53,15 @@ class WaterNotifications {
   }) async {}
 
   Future<void> cancelAll() async {}
+
+  // The browser can't schedule notifications for a closed tab.
+  Future<void> scheduleDailyAt({
+    required int id,
+    required int hour,
+    required int minute,
+    required String title,
+    required String body,
+  }) async {}
+
+  Future<void> cancel(int id) async {}
 }

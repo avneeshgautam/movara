@@ -51,6 +51,22 @@ class _WorkoutSessionState extends State<WorkoutSession> {
 
   /// Today's entries per exercise name (lowercased), oldest first so they map
   /// onto set 1, set 2, ... in the order they were completed.
+  /// Lifetime best reps and heaviest weight per exercise (lowercased name),
+  /// across every logged entry — shown on each card for motivation.
+  Map<String, ({int reps, double weight})> _bestsByExercise() {
+    final map = <String, ({int reps, double weight})>{};
+    for (final e in widget.entries) {
+      final key = e.exerciseName.toLowerCase();
+      final prev = map[key];
+      final w = e.weightKg ?? 0;
+      map[key] = (
+        reps: prev == null ? e.reps : (e.reps > prev.reps ? e.reps : prev.reps),
+        weight: prev == null ? w : (w > prev.weight ? w : prev.weight),
+      );
+    }
+    return map;
+  }
+
   Map<String, List<WorkoutEntry>> _loggedToday() {
     final now = DateTime.now();
     final grouped = <String, List<WorkoutEntry>>{};
@@ -74,6 +90,7 @@ class _WorkoutSessionState extends State<WorkoutSession> {
     final c = context.movara;
     final exercises = _workoutData[_active] ?? const [];
     final loggedToday = _loggedToday();
+    final bests = _bestsByExercise();
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -163,6 +180,7 @@ class _WorkoutSessionState extends State<WorkoutSession> {
                       exercise: exercises[i],
                       todayEntries:
                           loggedToday[exercises[i].name.toLowerCase()] ?? const [],
+                      best: bests[exercises[i].name.toLowerCase()],
                       onLogSet: widget.onLogSet,
                       onUnlogSet: widget.onUnlogSet,
                     ),
@@ -205,12 +223,17 @@ class _ExerciseCard extends StatefulWidget {
     super.key,
     required this.exercise,
     required this.todayEntries,
+    required this.best,
     required this.onLogSet,
     required this.onUnlogSet,
   });
 
   final _Exercise exercise;
   final List<WorkoutEntry> todayEntries;
+
+  /// Lifetime best reps + heaviest weight for this exercise, or null if never
+  /// logged.
+  final ({int reps, double weight})? best;
   final Future<String?> Function(String, int, double) onLogSet;
   final Future<void> Function(String) onUnlogSet;
 
@@ -392,6 +415,37 @@ class _ExerciseCardState extends State<_ExerciseCard> {
     if (id != null) await widget.onUnlogSet(id);
   }
 
+  bool get _hasBest {
+    final b = widget.best;
+    return b != null && (b.reps > 0 || b.weight > 0);
+  }
+
+  /// Personal-best chip: your lifetime best reps and heaviest weight for this
+  /// exercise, for a little motivation to beat it.
+  Widget _prChip(BuildContext context) {
+    final c = context.movara;
+    final b = widget.best!;
+    final parts = <String>[
+      if (b.reps > 0) '${b.reps} reps',
+      if (b.weight > 0) '${_formatWeight(b.weight)} kg',
+    ];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.accentSoft,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '🏆 PR ${parts.join(' · ')}',
+        style: AppTheme.display(
+          color: c.accent,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.movara;
@@ -440,6 +494,10 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                           ex.muscle,
                           style: TextStyle(color: c.textMuted, fontSize: 11),
                         ),
+                        if (_hasBest) ...[
+                          const SizedBox(height: 4),
+                          _prChip(context),
+                        ],
                       ],
                     ),
                   ),
