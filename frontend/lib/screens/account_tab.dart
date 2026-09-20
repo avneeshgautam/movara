@@ -1174,9 +1174,22 @@ class _AccountTabState extends State<AccountTab> {
           style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.5),
         ),
         actions: [
+          if (stepsToday == null || stepsToday == 0)
+            TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  // Opens the Health app; Profile → Apps → Movara has the
+                  // Steps read toggle. Bypasses canLaunchUrl since the custom
+                  // scheme need not be in LSApplicationQueriesSchemes to open.
+                  launchUrl(Uri.parse('x-apple-health://'),
+                          mode: LaunchMode.externalApplication)
+                      .catchError((_) => false);
+                },
+                child: Text('Open Apple Health',
+                    style: TextStyle(color: c.accent))),
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('OK', style: TextStyle(color: c.accent))),
+              child: Text('OK', style: TextStyle(color: c.textMuted))),
         ],
       ),
     );

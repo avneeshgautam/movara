@@ -87,13 +87,13 @@ def my_profile(
 
 
 def _public_name(profile: "db.Profile", uid: str) -> str:
-    """What to show for this profile: the caller sees their own real name;
-    everyone else sees the chosen username, or just a first name as a
-    privacy-preserving fallback."""
-    if profile.user_id == uid:
-        return profile.display_name
+    """What to show for this profile. A chosen username wins for everyone,
+    including the owner, so it shows up on their own feed too. Without one the
+    caller sees their full name and others see just a first name."""
     if profile.username:
         return profile.username
+    if profile.user_id == uid:
+        return profile.display_name
     return profile.display_name.split(" ")[0] if profile.display_name else "Athlete"
 
 
