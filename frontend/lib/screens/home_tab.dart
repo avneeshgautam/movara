@@ -75,9 +75,9 @@ class HomeTab extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
+              // 2×2 grid so each value has room (4-in-a-row clipped them).
               Row(
                 children: [
-                  // Real: total sets logged this week.
                   Expanded(
                     child: MiniStat(
                       label: 'Sets',
@@ -85,7 +85,6 @@ class HomeTab extends StatelessWidget {
                       unit: 'wk',
                     ),
                   ),
-                  // Real: distance run and minutes active this week.
                   const SizedBox(width: 10),
                   Expanded(
                     child: MiniStat(
@@ -94,7 +93,11 @@ class HomeTab extends StatelessWidget {
                       unit: 'km',
                     ),
                   ),
-                  const SizedBox(width: 10),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
                   Expanded(
                     child: MiniStat(
                       label: 'Active',
@@ -102,9 +105,9 @@ class HomeTab extends StatelessWidget {
                       unit: 'min',
                     ),
                   ),
+                  const SizedBox(width: 10),
                   // Today's real steps from Apple Health when connected,
                   // otherwise this week's steps estimated from activities.
-                  const SizedBox(width: 10),
                   Expanded(
                     child: _StepsStat(
                       weeklyEstimate: runStore.stepsThisWeek(),
