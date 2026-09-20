@@ -2,16 +2,19 @@ import 'package:flutter/foundation.dart';
 import 'package:health/health.dart';
 
 /// Thin wrapper over Apple Health / Health Connect for the metrics an Apple
-/// Watch (or the phone) records: heart rate and steps. Read-only.
+/// Watch (or the phone, or a synced app like NoiseFit) records: heart rate
+/// and steps. Read-only.
 ///
 /// Everything is guarded so the app still runs where HealthKit doesn't exist
-/// (the web build, or a simulator without Health) — those calls just return
-/// null and the UI falls back to its own estimates.
+/// (the web build) — those calls return null and the UI falls back to its own
+/// estimates. Uses the health plugin's dedicated step-total query, which reads
+/// steps correctly on modern iOS (a raw sample sum does not).
 class HealthService {
   HealthService._();
   static final HealthService instance = HealthService._();
 
-  final HealthFactory _health = HealthFactory();
+  Health? _health;
+  bool _configured = false;
 
   static const _types = [
     HealthDataType.HEART_RATE,
@@ -24,33 +27,52 @@ class HealthService {
       (defaultTargetPlatform == TargetPlatform.iOS ||
           defaultTargetPlatform == TargetPlatform.android);
 
-  /// Asks the OS for read access. Returns true if granted.
+  /// Lazily builds and configures the plugin (never on the web).
+  Future<Health?> _ready() async {
+    if (!isSupported) return null;
+    final health = _health ??= Health();
+    if (!_configured) {
+      await health.configure();
+      _configured = true;
+    }
+    return health;
+  }
+
+  /// Asks the OS for read access to heart rate and steps. Returns true if the
+  /// request completed (on iOS this is true whenever the sheet was shown —
+  /// HealthKit never discloses whether READ was actually granted).
   Future<bool> requestPermission() async {
-    if (!isSupported) return false;
     try {
-      return await _health.requestAuthorization(_types);
+      final health = await _ready();
+      if (health == null) return false;
+      return await health.requestAuthorization(
+        _types,
+        permissions: const [HealthDataAccess.READ, HealthDataAccess.READ],
+      );
     } catch (_) {
       return false;
     }
   }
 
-  /// The most recent heart-rate sample within [within], or null. Apple Watch
-  /// readings reach the phone with a short sync delay, so this is near-live,
-  /// not instantaneous.
+  /// The most recent heart-rate reading within [within], or null.
   Future<int?> latestHeartRate(
       {Duration within = const Duration(minutes: 3)}) async {
-    if (!isSupported) return null;
-    final now = DateTime.now();
     try {
-      final points = await _health.getHealthDataFromTypes(
-          now.subtract(within), now, [HealthDataType.HEART_RATE]);
-      final valid = points.where((p) {
-        final v = p.value.toDouble();
-        return v.isFinite && v > 0;
-      }).toList();
+      final health = await _ready();
+      if (health == null) return null;
+      final now = DateTime.now();
+      final points = await health.getHealthDataFromTypes(
+        types: const [HealthDataType.HEART_RATE],
+        startTime: now.subtract(within),
+        endTime: now,
+      );
+      final valid = points
+          .map(_numeric)
+          .whereType<double>()
+          .where((v) => v.isFinite && v > 0)
+          .toList();
       if (valid.isEmpty) return null;
-      valid.sort((a, b) => a.dateTo.compareTo(b.dateTo));
-      return valid.last.value.round();
+      return valid.last.round();
     } catch (_) {
       return null;
     }
@@ -58,13 +80,17 @@ class HealthService {
 
   /// Average heart rate over a finished activity, or null if none recorded.
   Future<int?> averageHeartRate(DateTime start, DateTime end) async {
-    if (!isSupported) return null;
     try {
-      final points = await _health
-          .getHealthDataFromTypes(start, end, [HealthDataType.HEART_RATE]);
-      // Keep only sane readings — some sources emit 0 or garbage samples.
+      final health = await _ready();
+      if (health == null) return null;
+      final points = await health.getHealthDataFromTypes(
+        types: const [HealthDataType.HEART_RATE],
+        startTime: start,
+        endTime: end,
+      );
       final values = points
-          .map((p) => p.value.toDouble())
+          .map(_numeric)
+          .whereType<double>()
           .where((v) => v.isFinite && v > 0)
           .toList();
       if (values.isEmpty) return null;
@@ -75,22 +101,21 @@ class HealthService {
     }
   }
 
-  /// Total real steps between two times, or null. Overlapping samples from
-  /// several sources (iPhone + Watch) can carry corrections, so only positive,
-  /// finite counts are summed and the total is never returned negative.
+  /// Total steps between two times, using HealthKit's own aggregation, or null.
   Future<int?> steps(DateTime start, DateTime end) async {
-    if (!isSupported) return null;
     try {
-      final points =
-          await _health.getHealthDataFromTypes(start, end, [HealthDataType.STEPS]);
-      final total = points.fold<double>(0, (sum, p) {
-        final v = p.value.toDouble();
-        return (v.isFinite && v > 0) ? sum + v : sum;
-      });
-      final rounded = total.round();
-      return rounded > 0 ? rounded : null;
+      final health = await _ready();
+      if (health == null) return null;
+      final total = await health.getTotalStepsInInterval(start, end);
+      return (total != null && total > 0) ? total : null;
     } catch (_) {
       return null;
     }
+  }
+
+  /// Pulls the numeric value out of a data point, or null for non-numeric.
+  double? _numeric(HealthDataPoint p) {
+    final v = p.value;
+    return v is NumericHealthValue ? v.numericValue.toDouble() : null;
   }
 }
