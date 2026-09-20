@@ -131,7 +131,8 @@ void main() {
       expect(find.text('BODY STATS'), findsOneWidget);
       expect(find.text('DAILY GOALS'), findsOneWidget);
       expect(find.text('BADGES'), findsOneWidget);
-      expect(find.text('LEADERBOARD NAME'), findsOneWidget);
+      // Username editing now lives in the hero, not a separate section.
+      expect(find.text('Set a username'), findsOneWidget);
       // The full settings menu is present, including working actions.
       expect(find.text('PREFERENCES'), findsOneWidget);
       expect(find.text('Water Reminders'), findsOneWidget);

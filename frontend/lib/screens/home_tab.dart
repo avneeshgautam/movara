@@ -114,34 +114,8 @@ class HomeTab extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              const SectionHeader(title: 'Self Achievements', action: 'See all →'),
-              // Streak card is real; the other two are still mockup content.
-              if (stats.streak > 0) ...[
-                AchievementCard(
-                  emoji: '🔥',
-                  title: stats.streak == 1
-                      ? 'First Day Logged'
-                      : '${stats.streak}-Day Streak',
-                  description: 'Keep the momentum going',
-                  date: 'Today',
-                  tint: c.greenSoft,
-                ),
-                const SizedBox(height: 10),
-              ],
-              if (_goalReached(stats, entries)) ...[
-                AchievementCard(
-                  emoji: '🎯',
-                  title: '${goalStore.periodLabel} Goal Reached',
-                  description: 'Both your sets and distance goals are done',
-                  date: goalStore.periodLabel,
-                  tint: c.accentSoft,
-                ),
-                const SizedBox(height: 10),
-              ],
-              if (_runAchievement(context) case final card?) ...[
-                const SizedBox(height: 10),
-                card,
-              ],
+              const SectionHeader(title: 'Self Achievements'),
+              ..._achievements(context, stats, entries),
               const SizedBox(height: 24),
 
               const SectionHeader(title: 'This Week'),
@@ -248,31 +222,110 @@ class HomeTab extends StatelessWidget {
     }
   }
 
-  /// A real running achievement from recorded runs, or null when none exist
-  /// yet -- rather than the old hardcoded "5K in 24 min".
-  Widget? _runAchievement(BuildContext context) {
+  /// Achievements derived from real trends in the user's own history — a
+  /// streak, week-over-week progress, personal bests and lifetime milestones.
+  /// Returns cards spaced by gaps, or an encouraging empty state.
+  List<Widget> _achievements(
+      BuildContext context, WeekStats stats, List<WorkoutEntry> entries) {
     final c = context.movara;
-    final longest = runStore.longestRun;
-    if (longest == null || longest.distanceKm < 0.1) return null;
+    final cards = <Widget>[];
 
+    if (stats.streak > 0) {
+      cards.add(AchievementCard(
+        emoji: '🔥',
+        title: stats.streak == 1
+            ? 'First Day Logged'
+            : '${stats.streak}-Day Streak',
+        description: 'Keep the momentum going',
+        date: 'Today',
+        tint: c.greenSoft,
+      ));
+    }
+
+    if (_goalReached(stats, entries)) {
+      cards.add(AchievementCard(
+        emoji: '🎯',
+        title: '${goalStore.periodLabel} Goal Reached',
+        description: 'Both your sets and distance goals are done',
+        date: goalStore.periodLabel,
+        tint: c.accentSoft,
+      ));
+    }
+
+    // Trending up: more distance this week than last.
+    final thisWk = runStore.totalKmThisWeek();
+    final lastWk = runStore.totalKmLastWeek();
+    if (lastWk > 0.1 && thisWk > lastWk) {
+      final pct = ((thisWk - lastWk) / lastWk * 100).round();
+      cards.add(AchievementCard(
+        emoji: '📈',
+        title: 'Trending Up',
+        description: '$pct% more distance than last week',
+        date: 'This week',
+        tint: c.greenSoft,
+      ));
+    }
+
+    // Personal best pace.
     final fastest = runStore.fastestPace;
-    if (fastest != null) {
-      return AchievementCard(
+    if (fastest != null && fastest.paceSecondsPerKm > 0) {
+      cards.add(AchievementCard(
         emoji: '⚡',
         title: 'Best Pace',
         description: '${formatPace(fastest.paceSecondsPerKm)} /km over '
             '${fastest.distanceKm.toStringAsFixed(1)} km',
         date: _relativeDay(fastest.startedAt),
         tint: c.blueSoft,
-      );
+      ));
     }
-    return AchievementCard(
-      emoji: '🏃',
-      title: 'Longest Run',
-      description: '${longest.distanceKm.toStringAsFixed(2)} km',
-      date: _relativeDay(longest.startedAt),
-      tint: c.blueSoft,
-    );
+
+    // Lifetime distance milestone.
+    final total = runStore.totalKmAllTime;
+    final milestone = [100, 50, 25, 10, 5, 1]
+        .cast<int>()
+        .firstWhere((m) => total >= m, orElse: () => 0);
+    if (milestone > 0) {
+      cards.add(AchievementCard(
+        emoji: '🏅',
+        title: '$milestone km Club',
+        description: '${total.toStringAsFixed(1)} km all-time',
+        date: 'Lifetime',
+        tint: c.accentSoft,
+      ));
+    }
+
+    // Variety: tried more than one activity type.
+    final types = runStore.runs.map((r) => r.activityType).toSet();
+    if (types.length >= 2) {
+      cards.add(AchievementCard(
+        emoji: '🧭',
+        title: 'All-Rounder',
+        description: '${types.length} activity types tried',
+        date: 'Lifetime',
+        tint: c.greenSoft,
+      ));
+    }
+
+    if (cards.isEmpty) {
+      return [
+        AchievementCard(
+          emoji: '🌱',
+          title: 'Just Getting Started',
+          description: 'Log a workout or record a run to unlock achievements',
+          date: 'Now',
+          tint: c.surface2,
+        ),
+      ];
+    }
+
+    // Show the strongest few, spaced out.
+    final top = cards.take(4).toList();
+    return [
+      for (var i = 0; i < top.length; i++) ...[
+        if (i > 0) const SizedBox(height: 10),
+        top[i],
+      ],
+    ];
   }
 
   static String _relativeDay(DateTime when) {
@@ -552,13 +605,27 @@ class _StepsStat extends StatefulWidget {
   State<_StepsStat> createState() => _StepsStatState();
 }
 
-class _StepsStatState extends State<_StepsStat> {
+class _StepsStatState extends State<_StepsStat> with WidgetsBindingObserver {
   int? _today;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-read after the user comes back — e.g. from granting Health access in
+    // Settings, or after walking around with the app backgrounded.
+    if (state == AppLifecycleState.resumed) _load();
   }
 
   Future<void> _load() async {
@@ -566,7 +633,7 @@ class _StepsStatState extends State<_StepsStat> {
     final now = DateTime.now();
     final start = DateTime(now.year, now.month, now.day);
     final steps = await HealthService.instance.steps(start, now);
-    if (mounted && steps != null) setState(() => _today = steps);
+    if (mounted && steps != null && steps > 0) setState(() => _today = steps);
   }
 
   @override

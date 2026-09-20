@@ -111,6 +111,19 @@ class RunStore extends ChangeNotifier {
   int stepsThisWeek({DateTime? now}) =>
       _thisWeek(now: now).fold<int>(0, (a, r) => a + r.estimatedSteps);
 
+  /// Distance covered in the previous calendar week, for trend comparisons.
+  double totalKmLastWeek({DateTime? now}) {
+    final today = _startOfDay(now ?? DateTime.now());
+    final lastMonday =
+        today.subtract(Duration(days: today.weekday - 1 + 7));
+    return _runs
+        .where((r) {
+          final offset = _startOfDay(r.startedAt).difference(lastMonday).inDays;
+          return offset >= 0 && offset < 7;
+        })
+        .fold<double>(0, (a, r) => a + r.distanceKm);
+  }
+
   /// Minutes spent running so far this week.
   int activeMinutesThisWeek({DateTime? now}) => _thisWeek(now: now)
       .fold<int>(0, (a, r) => a + r.elapsedSeconds) ~/

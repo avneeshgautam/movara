@@ -146,3 +146,31 @@ class TestUsernamePrivacy:
         ).json()
         assert me["displayName"] == "Bob Smith"
         assert me["username"] == "IronBob"
+
+    def test_username_must_be_unique(self, local_signing_key):
+        client.put(
+            "/api/profile",
+            json={"displayName": "Bob", "username": "IronBob"},
+            headers=headers_for(local_signing_key, "bob"),
+        )
+        # Alice cannot take the same name (case-insensitively).
+        clash = client.put(
+            "/api/profile",
+            json={"displayName": "Alice", "username": "ironbob"},
+            headers=headers_for(local_signing_key, "alice"),
+        )
+        assert clash.status_code == 409
+        # Availability endpoint agrees.
+        avail = client.get(
+            "/api/profile/username-available",
+            params={"u": "IronBob"},
+            headers=headers_for(local_signing_key, "alice"),
+        ).json()
+        assert avail["available"] is False
+        # But the owner can re-save their own name.
+        again = client.put(
+            "/api/profile",
+            json={"displayName": "Bob", "username": "IronBob"},
+            headers=headers_for(local_signing_key, "bob"),
+        )
+        assert again.status_code == 204

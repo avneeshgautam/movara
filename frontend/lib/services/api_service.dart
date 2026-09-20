@@ -98,11 +98,12 @@ class ApiService {
   }
 
   /// Registers (or updates) the signed-in user's name and photo so they can
-  /// appear on the leaderboard. Best-effort: failures are swallowed.
+  /// appear on the leaderboard. Throws [UsernameTaken] if the chosen username
+  /// is already in use; other failures are swallowed (best-effort).
   Future<void> upsertProfile(String displayName,
       {String? photoUrl, String? username}) async {
     try {
-      await _client.put(
+      final response = await _client.put(
         _uri('/profile'),
         headers: await _headers(json: true),
         body: jsonEncode({
@@ -111,8 +112,29 @@ class ApiService {
           if (username != null) 'username': username,
         }),
       );
+      if (response.statusCode == 409) throw const UsernameTaken();
+    } on UsernameTaken {
+      rethrow;
     } catch (_) {
       // Not fatal -- the board just won't show this user until it succeeds.
+    }
+  }
+
+  /// Whether a public username is free (case-insensitive). Defaults to true on
+  /// any error so a flaky check never blocks saving.
+  Future<bool> isUsernameAvailable(String username) async {
+    final u = username.trim();
+    if (u.isEmpty) return true;
+    try {
+      final response = await _client.get(
+        _uri('/profile/username-available', {'u': u}),
+        headers: await _headers(),
+      );
+      if (response.statusCode != 200) return true;
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return data['available'] as bool? ?? true;
+    } catch (_) {
+      return true;
     }
   }
 
@@ -221,4 +243,9 @@ class ApiException implements Exception {
 /// Thrown when the assistant backend has no API key configured.
 class ChatUnavailable implements Exception {
   const ChatUnavailable();
+}
+
+/// Thrown when a chosen public username is already in use by someone else.
+class UsernameTaken implements Exception {
+  const UsernameTaken();
 }

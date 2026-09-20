@@ -48,8 +48,10 @@ class _AccountTabState extends State<AccountTab> {
   String get _handle => widget.email ?? 'Signed in';
 
   final _usernameController = TextEditingController();
-  bool _savingUsername = false;
-  String? _usernameMsg;
+
+  /// The tier badge shown in the hero, decided by how the user ranks against
+  /// everyone else on the leaderboard. Empty until it loads.
+  String _badge = '';
 
   @override
   void initState() {
@@ -57,6 +59,32 @@ class _AccountTabState extends State<AccountTab> {
     _loadUsername();
     _loadBody();
     _loadToggles();
+    _loadBadge();
+  }
+
+  /// Trend/percentile logic: compare the user's leaderboard rank against the
+  /// field. Top third → Pro Athlete, middle → Athlete, rest → Rising.
+  Future<void> _loadBadge() async {
+    try {
+      final board = await widget.api.fetchLeaderboard();
+      final me = board.where((e) => e.isMe).toList();
+      String badge;
+      if (me.isEmpty) {
+        badge = '🌱 RISING';
+      } else if (board.length < 3) {
+        badge = '💪 ATHLETE'; // too few peers to rank meaningfully
+      } else {
+        final pct = me.first.rank / board.length; // rank 1 = strongest
+        badge = pct <= 0.34
+            ? '🔥 PRO ATHLETE'
+            : pct <= 0.67
+                ? '💪 ATHLETE'
+                : '🌱 RISING';
+      }
+      if (mounted) setState(() => _badge = badge);
+    } catch (_) {
+      if (mounted) setState(() => _badge = '🌱 RISING');
+    }
   }
 
   Future<void> _loadToggles() async {
@@ -106,24 +134,99 @@ class _AccountTabState extends State<AccountTab> {
     }
   }
 
-  Future<void> _saveUsername() async {
-    final value = _usernameController.text.trim();
-    setState(() {
-      _savingUsername = true;
-      _usernameMsg = null;
-    });
-    try {
-      await widget.api.upsertProfile(widget.displayName,
-          photoUrl: widget.photoUrl, username: value);
-      if (mounted) {
-        setState(() => _usernameMsg = value.isEmpty
-            ? 'Cleared — others will see your first name.'
-            : 'Saved. Others see “$value” on the leaderboard.');
-      }
-    } catch (_) {
-      if (mounted) setState(() => _usernameMsg = "Couldn't save. Try again.");
-    } finally {
-      if (mounted) setState(() => _savingUsername = false);
+  /// Edit the public username (also the leaderboard name). Enforces
+  /// uniqueness — a taken name is rejected with a clear message.
+  Future<void> _editUsername(BuildContext context) async {
+    final c = context.movara;
+    final controller =
+        TextEditingController(text: _usernameController.text.trim());
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        var busy = false;
+        String? error;
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Future<void> save() async {
+              final value = controller.text.trim();
+              setDialogState(() {
+                busy = true;
+                error = null;
+              });
+              // Pre-check for a friendlier message before writing.
+              if (value.isNotEmpty &&
+                  !await widget.api.isUsernameAvailable(value)) {
+                setDialogState(() {
+                  busy = false;
+                  error = 'That username is already taken.';
+                });
+                return;
+              }
+              try {
+                await widget.api.upsertProfile(widget.displayName,
+                    photoUrl: widget.photoUrl, username: value);
+                if (dialogContext.mounted) Navigator.pop(dialogContext, value);
+              } on UsernameTaken {
+                setDialogState(() {
+                  busy = false;
+                  error = 'That username is already taken.';
+                });
+              } catch (_) {
+                setDialogState(() {
+                  busy = false;
+                  error = "Couldn't save. Try again.";
+                });
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: c.surface,
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text('Your username',
+                  style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'This is your unique name on the leaderboard. Leave it blank '
+                    'to show just your first name.',
+                    style: TextStyle(
+                        color: c.textSecondary, fontSize: 12, height: 1.4),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    maxLength: 40,
+                    style: TextStyle(color: c.textPrimary, fontSize: 14),
+                    decoration: InputDecoration(
+                      prefixText: '@',
+                      hintText: 'IronMike',
+                      errorText: error,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: busy ? null : () => Navigator.pop(dialogContext),
+                  child: Text('Cancel', style: TextStyle(color: c.textMuted)),
+                ),
+                TextButton(
+                  onPressed: busy ? null : save,
+                  child: Text(busy ? 'Saving…' : 'Save',
+                      style: TextStyle(color: c.accent)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (saved != null && mounted) {
+      setState(() => _usernameController.text = saved);
     }
   }
 
@@ -176,9 +279,6 @@ class _AccountTabState extends State<AccountTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _title('Leaderboard Name'),
-                    _leaderboardName(context),
-                    const SizedBox(height: 22),
                     _title('Body Stats'),
                     _bodyStats(context),
                     const SizedBox(height: 22),
@@ -209,83 +309,6 @@ class _AccountTabState extends State<AccountTab> {
     );
   }
 
-  Widget _leaderboardName(BuildContext context) {
-    final c = context.movara;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.surface,
-        border: Border.all(color: c.border),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'The name others see on the leaderboard. Leave it blank to show '
-            'just your first name.',
-            style: TextStyle(color: c.textSecondary, fontSize: 12, height: 1.4),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _usernameController,
-                  maxLength: 40,
-                  style: TextStyle(color: c.textPrimary, fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'e.g. IronMike',
-                    hintStyle: TextStyle(color: c.textMuted),
-                    counterText: '',
-                    isDense: true,
-                    filled: true,
-                    fillColor: c.surface2,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: c.border),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: c.accent),
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: c.border),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              GestureDetector(
-                onTap: _savingUsername ? null : _saveUsername,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-                  decoration: BoxDecoration(
-                    color: c.accent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(_savingUsername ? '…' : 'Save',
-                      style: AppTheme.display(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800)),
-                ),
-              ),
-            ],
-          ),
-          if (_usernameMsg != null) ...[
-            const SizedBox(height: 8),
-            Text(_usernameMsg!,
-                style: TextStyle(color: c.textMuted, fontSize: 11)),
-          ],
-        ],
-      ),
-    );
-  }
 
   // ── Hero ──────────────────────────────────────────────────────────
 
@@ -369,26 +392,50 @@ class _AccountTabState extends State<AccountTab> {
                     const SizedBox(height: 2),
                     Text(_handle,
                         style: TextStyle(color: c.textMuted, fontSize: 11)),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: c.accentSoft,
-                        borderRadius: BorderRadius.circular(999),
-                        border:
-                            Border.all(color: c.accent.withValues(alpha: 0.3)),
-                      ),
-                      child: Text(
-                        '🔥 PRO ATHLETE',
-                        style: AppTheme.display(
-                          color: c.accent,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.4,
-                        ),
+                    const SizedBox(height: 4),
+                    // Editable public username (shown on the leaderboard).
+                    GestureDetector(
+                      onTap: () => _editUsername(context),
+                      behavior: HitTestBehavior.opaque,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _usernameController.text.trim().isEmpty
+                                ? 'Set a username'
+                                : '@${_usernameController.text.trim()}',
+                            style: AppTheme.display(
+                              color: c.accent,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Icon(Icons.edit, size: 12, color: c.accent),
+                        ],
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    if (_badge.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: c.accentSoft,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                              color: c.accent.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          _badge,
+                          style: AppTheme.display(
+                            color: c.accent,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.4,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

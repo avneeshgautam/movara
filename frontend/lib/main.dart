@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'screens/auth_gate.dart';
@@ -21,6 +22,15 @@ Future<void> main() async {
   }
 
   runApp(MovaraApp(firebaseReady: firebaseReady));
+}
+
+/// Lets lists scroll by dragging with any pointer — mouse and trackpad
+/// included — which Flutter web otherwise limits to the scroll wheel.
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  const _AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => PointerDeviceKind.values.toSet();
 }
 
 class MovaraApp extends StatefulWidget {
@@ -48,6 +58,10 @@ class _MovaraAppState extends State<MovaraApp> {
     return MaterialApp(
       title: 'Movara',
       debugShowCheckedModeBanner: false,
+      // Flutter web disables mouse/trackpad drag-scrolling by default, so
+      // lists only move with the wheel. Enable every drag device so the web
+      // app scrolls by dragging too.
+      scrollBehavior: const _AppScrollBehavior(),
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: _mode,

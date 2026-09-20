@@ -7,7 +7,7 @@ weekly count are exposed -- never another user's individual entries.
 
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -41,8 +41,38 @@ def upsert_profile(
     profile.display_name = body.displayName.strip()[:120]
     profile.photo_url = body.photoUrl
     if body.username is not None:
-        profile.username = body.username[:40] or None
+        wanted = body.username[:40].strip() or None
+        if wanted is not None:
+            # Usernames are unique, case-insensitively, across all profiles.
+            clash = session.execute(
+                select(db.Profile.user_id)
+                .where(func.lower(db.Profile.username) == wanted.lower())
+                .where(db.Profile.user_id != uid)
+            ).first()
+            if clash is not None:
+                raise HTTPException(
+                    status_code=409, detail="That username is already taken."
+                )
+        profile.username = wanted
     session.commit()
+
+
+@router.get("/api/profile/username-available", status_code=200)
+def username_available(
+    u: str,
+    uid: str = Depends(current_uid),
+    session: Session = Depends(db.get_session),
+) -> dict:
+    """Whether a username is free (case-insensitive), ignoring the caller's own."""
+    wanted = u.strip()
+    if not wanted:
+        return {"available": True}
+    clash = session.execute(
+        select(db.Profile.user_id)
+        .where(func.lower(db.Profile.username) == wanted.lower())
+        .where(db.Profile.user_id != uid)
+    ).first()
+    return {"available": clash is None}
 
 
 @router.get("/api/profile/me", response_model=MyProfile)
