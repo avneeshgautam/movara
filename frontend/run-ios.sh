@@ -32,7 +32,13 @@ API_BASE_URL="${API_BASE_URL:-https://movara-backend-h22y.onrender.com/api}"
 
 echo "==> Building against $API_BASE_URL"
 echo "    (codesigning with the team set in Xcode)"
-flutter build ios --release --dart-define=API_BASE_URL="$API_BASE_URL"
+# Give every build a unique, increasing build number (epoch seconds). Without
+# this the version stays 0.1.0+1 forever, and the devicectl upgrade install
+# below silently skips replacing the binary -- so new code never lands.
+BUILD_NUMBER="$(date +%s)"
+flutter build ios --release \
+  --build-number="$BUILD_NUMBER" \
+  --dart-define=API_BASE_URL="$API_BASE_URL"
 
 # A booted simulator makes "the attached device" ambiguous and flutter then
 # installs nowhere -- while still exiting 0, so this has to be checked by hand.
