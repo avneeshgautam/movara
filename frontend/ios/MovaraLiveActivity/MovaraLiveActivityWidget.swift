@@ -9,25 +9,33 @@ struct MovaraLiveActivityWidget: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: MovaraActivityAttributes.self) { context in
       // Lock Screen / banner presentation.
-      HStack(spacing: 14) {
-        Text(context.attributes.emoji)
-          .font(.system(size: 34))
-        VStack(alignment: .leading, spacing: 2) {
-          Text(context.attributes.activityLabel.uppercased())
-            .font(.caption2)
+      VStack(alignment: .leading, spacing: 8) {
+        // Brand row so it's clearly the Movara app.
+        HStack(spacing: 6) {
+          Text("MOVARA")
+            .font(.system(size: 12, weight: .heavy, design: .rounded))
+            .tracking(2)
+            .foregroundColor(.orange)
+          Text("· \(context.attributes.activityLabel.uppercased())")
+            .font(.system(size: 11, weight: .semibold))
             .foregroundColor(.secondary)
+          Spacer()
+        }
+        HStack(spacing: 14) {
+          Text(context.attributes.emoji)
+            .font(.system(size: 34))
           Text(timerInterval: timerRange(context), countsDown: false)
             .font(.system(size: 30, weight: .bold, design: .rounded))
             .monospacedDigit()
-        }
-        Spacer()
-        VStack(alignment: .trailing, spacing: 2) {
-          Text(String(format: "%.2f", context.state.distanceKm))
-            .font(.system(size: 22, weight: .bold, design: .rounded))
-            .monospacedDigit()
-          Text("km")
-            .font(.caption2)
-            .foregroundColor(.secondary)
+          Spacer()
+          VStack(alignment: .trailing, spacing: 2) {
+            Text(String(format: "%.2f", context.state.distanceKm))
+              .font(.system(size: 22, weight: .bold, design: .rounded))
+              .monospacedDigit()
+            Text("km")
+              .font(.caption2)
+              .foregroundColor(.secondary)
+          }
         }
       }
       .padding()
