@@ -138,6 +138,14 @@ class RunStore extends ChangeNotifier {
   int stepsThisWeek({DateTime? now}) =>
       _thisWeek(now: now).fold<int>(0, (a, r) => a + r.estimatedSteps);
 
+  /// Estimated steps from today's recorded activities.
+  int stepsToday({DateTime? now}) {
+    final today = _startOfDay(now ?? DateTime.now());
+    return _runs
+        .where((r) => _startOfDay(r.startedAt) == today)
+        .fold<int>(0, (a, r) => a + r.estimatedSteps);
+  }
+
   /// Distance covered in the previous calendar week, for trend comparisons.
   double totalKmLastWeek({DateTime? now}) {
     final today = _startOfDay(now ?? DateTime.now());

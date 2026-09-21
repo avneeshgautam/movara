@@ -63,13 +63,39 @@ class HomeTab extends StatelessWidget {
                 action: 'Edit Goal →',
                 onAction: () => _editGoal(context),
               ),
+              // Streak on top of the reports.
+              _StreakBanner(
+                streak: stats.streak,
+                activeDays: [for (final v in stats.normalizedByWeekday) v > 0],
+                todayIndex: DateTime.now().weekday - 1,
+              ),
+              const SizedBox(height: 12),
+              // Two goal rings: today and this week, each sets/distance/steps.
               IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _goalCard(context, stats, entries),
-                    const SizedBox(width: 14),
-                    Expanded(child: StreakCard(days: stats.streak)),
+                    Expanded(
+                      child: _goalRingCard(
+                        context,
+                        title: 'Today',
+                        v: _todayValues(entries),
+                        setsGoal: goalStore.dailySetsGoal,
+                        kmGoal: goalStore.dailyKmGoal,
+                        stepsGoal: goalStore.dailyStepsGoal,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _goalRingCard(
+                        context,
+                        title: 'Week',
+                        v: _weekValues(stats),
+                        setsGoal: goalStore.setsGoal,
+                        kmGoal: goalStore.kmGoal,
+                        stepsGoal: goalStore.stepsGoal,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -144,48 +170,64 @@ class HomeTab extends StatelessWidget {
         .fold<int>(0, (a, e) => a + e.sets);
   }
 
-  ({int sets, double km}) _current(WeekStats stats, List<WorkoutEntry> entries) {
-    if (goalStore.period == GoalPeriod.daily) {
-      return (sets: _todaySets(entries), km: runStore.kmToday());
-    }
-    return (sets: stats.totalSetsThisWeek, km: runStore.totalKmThisWeek());
-  }
+  ({int sets, double km, int steps}) _todayValues(List<WorkoutEntry> entries) =>
+      (
+        sets: _todaySets(entries),
+        km: runStore.kmToday(),
+        steps: runStore.stepsToday(),
+      );
 
-  bool _goalReached(WeekStats stats, List<WorkoutEntry> entries) {
-    final cur = _current(stats, entries);
+  ({int sets, double km, int steps}) _weekValues(WeekStats stats) => (
+        sets: stats.totalSetsThisWeek,
+        km: runStore.totalKmThisWeek(),
+        steps: runStore.stepsThisWeek(),
+      );
+
+  bool _goalReached(WeekStats stats) {
     return goalStore.setsGoal > 0 &&
         goalStore.kmGoal > 0 &&
-        cur.sets >= goalStore.setsGoal &&
-        cur.km >= goalStore.kmGoal;
+        stats.totalSetsThisWeek >= goalStore.setsGoal &&
+        runStore.totalKmThisWeek() >= goalStore.kmGoal;
   }
 
-  Widget _goalCard(
-      BuildContext context, WeekStats stats, List<WorkoutEntry> entries) {
+  static String _shortK(int n) =>
+      n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}k' : '$n';
+
+  Widget _goalRingCard(
+    BuildContext context, {
+    required String title,
+    required ({int sets, double km, int steps}) v,
+    required int setsGoal,
+    required double kmGoal,
+    required int stepsGoal,
+  }) {
     final c = context.movara;
-    final cur = _current(stats, entries);
-    final setsPct =
-        goalStore.setsGoal <= 0 ? 0.0 : cur.sets / goalStore.setsGoal;
-    final kmPct = goalStore.kmGoal <= 0 ? 0.0 : cur.km / goalStore.kmGoal;
+    double pct(num cur, num goal) => goal <= 0 ? 0 : (cur / goal).toDouble();
 
     return MovaraCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           DualGoalRing(
-            outer: setsPct,
-            inner: kmPct,
+            outer: pct(v.sets, setsGoal),
+            inner: pct(v.km, kmGoal),
+            third: pct(v.steps, stepsGoal),
             outerColor: c.accent,
             innerColor: c.blue,
-            centerTop: goalStore.periodLabel,
+            thirdColor: c.green,
+            centerTop: title,
             centerBottom: 'goal',
-            size: 118,
+            size: 104,
           ),
-          const SizedBox(height: 12),
-          _legend(context, c.accent, 'Sets', '${cur.sets} / ${goalStore.setsGoal}'),
-          const SizedBox(height: 6),
-          _legend(context, c.blue, 'Run',
-              '${cur.km.toStringAsFixed(1)} / ${goalStore.kmGoal.toStringAsFixed(0)} km'),
+          const SizedBox(height: 10),
+          _legend(context, c.accent, 'Sets', '${v.sets}/$setsGoal'),
+          const SizedBox(height: 5),
+          _legend(context, c.blue, 'Km',
+              '${v.km.toStringAsFixed(1)}/${kmGoal.toStringAsFixed(0)}'),
+          const SizedBox(height: 5),
+          _legend(context, c.green, 'Steps',
+              '${_shortK(v.steps)}/${_shortK(stepsGoal)}'),
         ],
       ),
     );
@@ -211,17 +253,21 @@ class HomeTab extends StatelessWidget {
   }
 
   Future<void> _editGoal(BuildContext context) async {
-    final result = await showDialog<({GoalPeriod period, int sets, double km})>(
+    final result = await showDialog<({int sets, double km, int steps})>(
       context: context,
       builder: (_) => _GoalDialog(
-        period: goalStore.period,
         sets: goalStore.setsGoal,
         km: goalStore.kmGoal,
+        steps: goalStore.stepsGoal,
       ),
     );
     if (result != null) {
       await goalStore.save(
-          period: result.period, sets: result.sets, km: result.km);
+        period: GoalPeriod.weekly,
+        sets: result.sets,
+        km: result.km,
+        steps: result.steps,
+      );
     }
   }
 
@@ -245,12 +291,12 @@ class HomeTab extends StatelessWidget {
       ));
     }
 
-    if (_goalReached(stats, entries)) {
+    if (_goalReached(stats)) {
       cards.add(AchievementCard(
         emoji: '🎯',
-        title: '${goalStore.periodLabel} Goal Reached',
-        description: 'Both your sets and distance goals are done',
-        date: goalStore.periodLabel,
+        title: 'Weekly Goal Reached',
+        description: 'Your sets and distance goals are done',
+        date: 'This week',
         tint: c.accentSoft,
       ));
     }
@@ -471,36 +517,40 @@ class WeekStats {
   }
 }
 
-/// Sets the goal: a Daily/Weekly period plus sets and distance targets.
+/// Sets the weekly goals (sets, distance, steps). Daily targets are derived.
 class _GoalDialog extends StatefulWidget {
-  const _GoalDialog({required this.period, required this.sets, required this.km});
+  const _GoalDialog(
+      {required this.sets, required this.km, required this.steps});
 
-  final GoalPeriod period;
   final int sets;
   final double km;
+  final int steps;
 
   @override
   State<_GoalDialog> createState() => _GoalDialogState();
 }
 
 class _GoalDialogState extends State<_GoalDialog> {
-  late GoalPeriod _period = widget.period;
   late final TextEditingController _sets =
       TextEditingController(text: '${widget.sets}');
   late final TextEditingController _km =
       TextEditingController(text: widget.km.toStringAsFixed(0));
+  late final TextEditingController _steps =
+      TextEditingController(text: '${widget.steps}');
 
   @override
   void dispose() {
     _sets.dispose();
     _km.dispose();
+    _steps.dispose();
     super.dispose();
   }
 
   void _save() {
     final sets = int.tryParse(_sets.text.trim()) ?? widget.sets;
     final km = double.tryParse(_km.text.trim()) ?? widget.km;
-    Navigator.pop(context, (period: _period, sets: sets, km: km));
+    final steps = int.tryParse(_steps.text.trim()) ?? widget.steps;
+    Navigator.pop(context, (sets: sets, km: km, steps: steps));
   }
 
   @override
@@ -509,31 +559,20 @@ class _GoalDialogState extends State<_GoalDialog> {
     return AlertDialog(
       backgroundColor: c.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text('Your goal',
+      title: Text('Weekly goals',
           style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Period toggle.
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: c.surface2,
-              border: Border.all(color: c.border),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                _periodSeg('Daily', GoalPeriod.daily),
-                _periodSeg('Weekly', GoalPeriod.weekly),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _numberField(c, _sets, 'Workout sets', false),
+          Text('Your daily targets are these divided by 7.',
+              style: TextStyle(color: c.textMuted, fontSize: 12)),
           const SizedBox(height: 12),
-          _numberField(c, _km, 'Running distance (km)', true),
+          _numberField(c, _sets, 'Workout sets / week', false),
+          const SizedBox(height: 12),
+          _numberField(c, _km, 'Distance / week (km)', true),
+          const SizedBox(height: 12),
+          _numberField(c, _steps, 'Steps / week', false),
         ],
       ),
       actions: [
@@ -547,30 +586,6 @@ class _GoalDialogState extends State<_GoalDialog> {
           child: const Text('Save'),
         ),
       ],
-    );
-  }
-
-  Widget _periodSeg(String label, GoalPeriod p) {
-    final c = context.movara;
-    final selected = _period == p;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _period = p),
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? c.accent : Colors.transparent,
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Text(label,
-              style: AppTheme.display(
-                  color: selected ? Colors.white : c.textSecondary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700)),
-        ),
-      ),
     );
   }
 
@@ -646,6 +661,98 @@ class _StepsStatState extends State<_StepsStat> with WidgetsBindingObserver {
       label: 'Steps',
       value: formatSteps(today ?? widget.weeklyEstimate),
       unit: today != null ? 'today' : 'wk',
+    );
+  }
+}
+
+/// The streak, shown on top of the overview: an animated count-up with the
+/// week's active days as dots.
+class _StreakBanner extends StatelessWidget {
+  const _StreakBanner({
+    required this.streak,
+    required this.activeDays,
+    required this.todayIndex,
+  });
+
+  final int streak;
+  final List<bool> activeDays;
+  final int todayIndex;
+
+  static const _days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+    return MovaraCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          const Text('🔥', style: TextStyle(fontSize: 30)),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  TweenAnimationBuilder<int>(
+                    tween: IntTween(begin: 0, end: streak),
+                    duration: const Duration(milliseconds: 700),
+                    curve: Curves.easeOut,
+                    builder: (context, val, _) => Text(
+                      '$val',
+                      style: AppTheme.display(
+                          color: c.textPrimary,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          height: 1),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text('day streak',
+                        style: TextStyle(color: c.textSecondary, fontSize: 12)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(streak > 0 ? 'Keep it going!' : 'Log today to start one',
+                  style: TextStyle(color: c.textMuted, fontSize: 10)),
+            ],
+          ),
+          const Spacer(),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < 7; i++) ...[
+                if (i > 0) const SizedBox(width: 5),
+                Column(
+                  children: [
+                    Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: activeDays[i] ? c.accent : c.surface3,
+                        border: i == todayIndex
+                            ? Border.all(color: c.accent, width: 1.5)
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(_days[i],
+                        style: TextStyle(
+                            fontSize: 8,
+                            color: i == todayIndex ? c.accent : c.textMuted)),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
