@@ -2,6 +2,7 @@
 leaderboard (and, later, follow the user across devices)."""
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import db
@@ -9,6 +10,33 @@ from ..auth import current_uid
 from ..models import RunUpload
 
 router = APIRouter()
+
+
+@router.get("/api/runs")
+def list_runs(
+    uid: str = Depends(current_uid),
+    session: Session = Depends(db.get_session),
+) -> list[dict]:
+    """The signed-in user's synced runs (newest first) so history can be
+    restored on a fresh install. Route points are not stored server-side."""
+    rows = (
+        session.execute(
+            select(db.Run)
+            .where(db.Run.user_id == uid)
+            .order_by(db.Run.started_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "startedAt": r.started_at.isoformat(),
+            "elapsedSeconds": r.elapsed_seconds,
+            "distanceMeters": r.distance_meters,
+        }
+        for r in rows
+    ]
 
 
 @router.post("/api/runs", status_code=204)

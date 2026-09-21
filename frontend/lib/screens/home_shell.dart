@@ -46,7 +46,8 @@ class _HomeShellState extends State<HomeShell> {
   final _workoutTimer = WorkoutTimer();
   final _goals = GoalStore();
   late final ChatController _chat = ChatController(api: _api);
-  late final RunStore _runs = RunStore(uploader: _api.uploadRun);
+  late final RunStore _runs =
+      RunStore(uploader: _api.uploadRun, downloader: _api.fetchRuns);
   int _index = 0;
 
   // Entry list lives here, shared by Home (stats) and Workout (log), so a

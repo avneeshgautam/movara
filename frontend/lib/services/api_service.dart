@@ -169,6 +169,27 @@ class ApiService {
     }
   }
 
+  /// The user's runs stored on the backend (date, time, distance — no route
+  /// or activity type). Used to restore history after a reinstall.
+  Future<List<RunRecord>> fetchRuns() async {
+    return _resilient(() async {
+      final response =
+          await _client.get(_uri('/runs'), headers: await _headers());
+      _checkOk(response);
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list.map((e) {
+        final j = e as Map<String, dynamic>;
+        return RunRecord(
+          id: j['id'] as String,
+          startedAt: DateTime.parse(j['startedAt'] as String),
+          elapsedSeconds: j['elapsedSeconds'] as int,
+          distanceMeters: (j['distanceMeters'] as num).toDouble(),
+          route: const [],
+        );
+      }).toList();
+    });
+  }
+
   Future<List<LeaderboardEntry>> fetchLeaderboard() async {
     return _resilient(() async {
       final response =

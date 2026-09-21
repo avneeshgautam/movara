@@ -9,11 +9,16 @@ import '../models/run_record.dart';
 /// (best-effort, idempotent) via [uploader] so it can score on the
 /// leaderboard. Uploads that fail are retried on the next load.
 class RunStore extends ChangeNotifier {
-  RunStore({Future<void> Function(RunRecord)? uploader}) : _uploader = uploader;
+  RunStore({
+    Future<void> Function(RunRecord)? uploader,
+    Future<List<RunRecord>> Function()? downloader,
+  })  : _uploader = uploader,
+        _downloader = downloader;
 
   static const _key = 'saved_runs';
 
   final Future<void> Function(RunRecord)? _uploader;
+  final Future<List<RunRecord>> Function()? _downloader;
 
   List<RunRecord> _runs = [];
   bool _loaded = false;
@@ -41,6 +46,28 @@ class RunStore extends ChangeNotifier {
     // Backfill anything recorded before the backend had run sync, and retry
     // uploads that failed earlier. Cheap: the server upserts by id.
     _syncAll();
+
+    // Restore runs that exist on the backend but not on this device — e.g.
+    // after a reinstall wiped local storage. Server runs have no route/type,
+    // so richer local copies are always kept over them.
+    _restoreFromBackend();
+  }
+
+  Future<void> _restoreFromBackend() async {
+    final download = _downloader;
+    if (download == null) return;
+    try {
+      final remote = await download();
+      final localIds = _runs.map((r) => r.id).toSet();
+      final missing = remote.where((r) => !localIds.contains(r.id)).toList();
+      if (missing.isEmpty) return;
+      _runs = [..._runs, ...missing]
+        ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+      await _persist();
+      notifyListeners();
+    } catch (_) {
+      // Best-effort restore; local data still shows.
+    }
   }
 
   Future<void> add(RunRecord run) async {
