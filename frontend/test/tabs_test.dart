@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:movara_app/models/workout_entry.dart';
 import 'package:movara_app/services/run_store.dart';
 import 'package:movara_app/services/goal_store.dart';
+import 'package:movara_app/services/workout_timer.dart';
+import 'package:movara_app/services/workout_log.dart';
 import 'package:movara_app/services/api_service.dart';
 import 'package:movara_app/screens/account_tab.dart';
 import 'package:movara_app/screens/home_tab.dart';
@@ -43,6 +45,7 @@ void main() {
         entriesFuture: Future.value(sampleEntries),
         runStore: RunStore(),
         goalStore: GoalStore(),
+        workoutLog: WorkoutLog(),
         onReload: () async {},
       )));
       await tester.pumpAndSettle();
@@ -68,6 +71,7 @@ void main() {
         entriesFuture: Future.value(sampleEntries),
         runStore: RunStore(),
         goalStore: GoalStore(),
+        workoutLog: WorkoutLog(),
         onReload: () async {},
       )));
       await tester.pumpAndSettle();
@@ -82,6 +86,8 @@ void main() {
       await tester.pumpWidget(wrap(WorkoutTab(
         api: ApiService(),
         entriesFuture: Future.value(const <WorkoutEntry>[]),
+        workoutTimer: WorkoutTimer(),
+        workoutLog: WorkoutLog(),
         onReload: () async {},
       )));
       await tester.pumpAndSettle();
@@ -105,6 +111,8 @@ void main() {
       await tester.pumpWidget(wrap(WorkoutTab(
         api: ApiService(),
         entriesFuture: Future.value(const <WorkoutEntry>[]),
+        workoutTimer: WorkoutTimer(),
+        workoutLog: WorkoutLog(),
         onReload: () async {},
       )));
       await tester.pumpAndSettle();
@@ -125,6 +133,8 @@ void main() {
       await tester.pumpWidget(wrap(AccountTab(
         api: ApiService(),
         entriesFuture: Future.value(const <WorkoutEntry>[]),
+        runStore: RunStore(),
+        workoutLog: WorkoutLog(),
       )));
       await tester.pumpAndSettle();
 
@@ -164,6 +174,8 @@ void main() {
             performedAt: today,
           ),
         ]),
+        runStore: RunStore(),
+        workoutLog: WorkoutLog(),
       )));
       await tester.pumpAndSettle();
 
@@ -179,6 +191,8 @@ void main() {
       await tester.pumpWidget(wrap(AccountTab(
         api: ApiService(),
         entriesFuture: Future.value(const <WorkoutEntry>[]),
+        runStore: RunStore(),
+        workoutLog: WorkoutLog(),
       )));
       await tester.pumpAndSettle();
 
@@ -201,6 +215,8 @@ void main() {
       await tester.pumpWidget(wrap(WorkoutTab(
         api: ApiService(),
         entriesFuture: Future.value([loggedBenchPress(DateTime.now())]),
+        workoutTimer: WorkoutTimer(),
+        workoutLog: WorkoutLog(),
         onReload: () async {},
       )));
       await tester.pumpAndSettle();
@@ -218,6 +234,8 @@ void main() {
       await tester.pumpWidget(wrap(WorkoutTab(
         api: ApiService(),
         entriesFuture: Future.value([loggedBenchPress(yesterday)]),
+        workoutTimer: WorkoutTimer(),
+        workoutLog: WorkoutLog(),
         onReload: () async {},
       )));
       await tester.pumpAndSettle();

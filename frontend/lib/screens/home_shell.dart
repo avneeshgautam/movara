@@ -9,6 +9,7 @@ import '../services/goal_store.dart';
 import '../services/run_store.dart';
 import '../models/run_record.dart' show formatDuration;
 import '../services/workout_timer.dart';
+import '../services/workout_log.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 import '../widgets/movara_header.dart';
@@ -44,6 +45,7 @@ class _HomeShellState extends State<HomeShell> {
       ApiService(tokenProvider: widget.auth.idToken);
   final _reminders = ReminderScheduler();
   final _workoutTimer = WorkoutTimer();
+  final _workoutLog = WorkoutLog();
   final _goals = GoalStore();
   late final ChatController _chat = ChatController(api: _api);
   late final RunStore _runs =
@@ -61,6 +63,7 @@ class _HomeShellState extends State<HomeShell> {
     _reminders.load();
     _runs.load();
     _workoutTimer.load();
+    _workoutLog.load();
     _goals.load();
     // Register name/photo so this user shows on the leaderboard.
     _api.upsertProfile(_displayName,
@@ -72,6 +75,7 @@ class _HomeShellState extends State<HomeShell> {
     _reminders.dispose();
     _runs.dispose();
     _workoutTimer.dispose();
+    _workoutLog.dispose();
     _goals.dispose();
     _chat.dispose();
     _api.dispose();
@@ -163,11 +167,14 @@ class _HomeShellState extends State<HomeShell> {
                   entriesFuture: _entriesFuture,
                   runStore: _runs,
                   goalStore: _goals,
+                  workoutLog: _workoutLog,
                   onReload: _reload,
                 ),
                 WorkoutTab(
                   api: _api,
                   entriesFuture: _entriesFuture,
+                  workoutTimer: _workoutTimer,
+                  workoutLog: _workoutLog,
                   onReload: _reload,
                 ),
                 RunningTab(store: _runs),
@@ -176,6 +183,8 @@ class _HomeShellState extends State<HomeShell> {
                 AccountTab(
                   api: _api,
                   entriesFuture: _entriesFuture,
+                  runStore: _runs,
+                  workoutLog: _workoutLog,
                   displayName: _displayName,
                   email: widget.auth.currentUser?.email,
                   photoUrl: widget.auth.currentUser?.photoURL,

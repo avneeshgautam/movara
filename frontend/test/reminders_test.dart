@@ -48,6 +48,19 @@ class _FakeNotifications implements WaterNotifications {
 
   @override
   Future<void> cancelAll() async => cancelAllCount++;
+
+  @override
+  Future<void> scheduleDailyAt({
+    required int id,
+    required int hour,
+    required int minute,
+    required String title,
+    required String body,
+  }) async =>
+      scheduledBaseIds.add(id);
+
+  @override
+  Future<void> cancel(int id) async {}
 }
 
 void main() {

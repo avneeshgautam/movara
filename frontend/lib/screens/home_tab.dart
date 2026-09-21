@@ -3,11 +3,14 @@ import 'package:flutter/services.dart';
 
 import '../models/run_record.dart';
 import '../models/workout_entry.dart';
+import '../services/badges.dart';
 import '../services/goal_store.dart';
 import '../services/health_service.dart';
 import '../services/run_store.dart';
+import '../services/workout_log.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
+import '../widgets/badges_grid.dart';
 import '../widgets/dashboard_widgets.dart';
 import '../widgets/dual_goal_ring.dart';
 
@@ -22,12 +25,14 @@ class HomeTab extends StatelessWidget {
     required this.entriesFuture,
     required this.runStore,
     required this.goalStore,
+    required this.workoutLog,
     required this.onReload,
   });
 
   final Future<List<WorkoutEntry>> entriesFuture;
   final RunStore runStore;
   final GoalStore goalStore;
+  final WorkoutLog workoutLog;
   final Future<void> Function() onReload;
 
   @override
@@ -39,7 +44,7 @@ class HomeTab extends StatelessWidget {
       color: c.accent,
       backgroundColor: c.surface,
       child: AnimatedBuilder(
-        animation: Listenable.merge([runStore, goalStore]),
+        animation: Listenable.merge([runStore, goalStore, workoutLog]),
         builder: (context, _) => FutureBuilder<List<WorkoutEntry>>(
         future: entriesFuture,
         builder: (context, snapshot) {
@@ -147,6 +152,9 @@ class HomeTab extends StatelessWidget {
               ..._achievements(context, stats, entries),
               const SizedBox(height: 24),
 
+              _badgesSection(context, stats),
+              const SizedBox(height: 24),
+
               const SectionHeader(title: 'This Week'),
               WeeklyChart(
                 values: stats.normalizedByWeekday,
@@ -192,6 +200,42 @@ class HomeTab extends StatelessWidget {
 
   static String _shortK(int n) =>
       n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}k' : '$n';
+
+  BadgeStats _badgeStats(WeekStats stats) {
+    final longestRun = runStore.longestRun;
+    final types = runStore.runs.map((r) => r.activityType).toSet();
+    return BadgeStats(
+      workoutCount: workoutLog.totalCount,
+      longestWorkoutSeconds: workoutLog.longestSeconds,
+      workoutStreakDays: workoutLog.streakDays,
+      workoutsThisWeek: workoutLog.countThisWeek(),
+      totalKm: runStore.totalKmAllTime,
+      longestRunKm: longestRun?.distanceKm ?? 0,
+      runCount: runStore.runs.length,
+      stepsThisWeek: runStore.stepsThisWeek(),
+      activityTypes: types.length,
+    );
+  }
+
+  /// The full badge wall on Home: the highlighted "longest workout" record on
+  /// top, then every badge (earned and locked with progress).
+  Widget _badgesSection(BuildContext context, WeekStats stats) {
+    final badges = computeBadges(_badgeStats(stats));
+    final earned = earnedCount(badges);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionHeader(title: 'Badges', action: '$earned/${badges.length} earned'),
+        WorkoutRecordChip(
+          hasRecord: workoutLog.longestSeconds > 0,
+          longestLabel: formatWorkoutDuration(
+              Duration(seconds: workoutLog.longestSeconds)),
+        ),
+        const SizedBox(height: 12),
+        BadgesGrid(badges: badges),
+      ],
+    );
+  }
 
   Widget _goalRingCard(
     BuildContext context, {

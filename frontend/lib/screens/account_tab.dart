@@ -6,10 +6,14 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/run_record.dart';
 import '../models/workout_entry.dart';
 import '../services/api_service.dart';
+import '../services/badges.dart';
 import '../services/health_service.dart';
 import '../services/motivation_reminders.dart';
+import '../services/run_store.dart';
+import '../services/workout_log.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
+import '../widgets/badges_grid.dart';
 
 /// Profile / account screen.
 ///
@@ -23,6 +27,8 @@ class AccountTab extends StatefulWidget {
     super.key,
     required this.api,
     required this.entriesFuture,
+    required this.runStore,
+    required this.workoutLog,
     this.onOpenTab,
     this.displayName = 'Athlete',
     this.email,
@@ -32,6 +38,8 @@ class AccountTab extends StatefulWidget {
 
   final ApiService api;
   final Future<List<WorkoutEntry>> entriesFuture;
+  final RunStore runStore;
+  final WorkoutLog workoutLog;
   final String displayName;
   final String? email;
   final String? photoUrl;
@@ -757,50 +765,24 @@ class _AccountTabState extends State<AccountTab> {
   }
 
   Widget _badges(BuildContext context) {
-    final c = context.movara;
-    const badges = <({String icon, String label, bool earned})>[
-      (icon: '🏅', label: '10K Steps', earned: true),
-      (icon: '🔥', label: '7-Day Streak', earned: true),
-      (icon: '💪', label: '100kg Bench', earned: true),
-      (icon: '🏃', label: '5K Runner', earned: true),
-      (icon: '⚡', label: '30-Day Warrior', earned: false),
-      (icon: '🥇', label: 'Elite Lifter', earned: false),
-    ];
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
-      childAspectRatio: 0.92,
-      children: [
-        for (final b in badges)
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: b.earned ? c.surface : c.surface2,
-              border: Border.all(
-                  color: b.earned ? c.accent.withValues(alpha: 0.4) : c.border),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Opacity(
-                    opacity: b.earned ? 1 : 0.35,
-                    child: Text(b.icon, style: const TextStyle(fontSize: 24))),
-                const SizedBox(height: 6),
-                Text(b.label,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    style: TextStyle(
-                        color: b.earned ? c.textPrimary : c.textMuted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
-      ],
+    return AnimatedBuilder(
+      animation: Listenable.merge([widget.runStore, widget.workoutLog]),
+      builder: (context, _) {
+        final types =
+            widget.runStore.runs.map((r) => r.activityType).toSet();
+        final badges = computeBadges(BadgeStats(
+          workoutCount: widget.workoutLog.totalCount,
+          longestWorkoutSeconds: widget.workoutLog.longestSeconds,
+          workoutStreakDays: widget.workoutLog.streakDays,
+          workoutsThisWeek: widget.workoutLog.countThisWeek(),
+          totalKm: widget.runStore.totalKmAllTime,
+          longestRunKm: widget.runStore.longestRun?.distanceKm ?? 0,
+          runCount: widget.runStore.runs.length,
+          stepsThisWeek: widget.runStore.stepsThisWeek(),
+          activityTypes: types.length,
+        ));
+        return BadgesGrid(badges: badges);
+      },
     );
   }
 
