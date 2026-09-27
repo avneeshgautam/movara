@@ -229,6 +229,22 @@ void main() {
       expect(find.byIcon(Icons.check), findsOneWidget);
     });
 
+    testWidgets("today's logged exercise lights up its category pill",
+        (tester) async {
+      await tester.pumpWidget(wrap(WorkoutTab(
+        api: ApiService(),
+        // Bench Press belongs to the Chest category.
+        entriesFuture: Future.value([loggedBenchPress(DateTime.now())]),
+        workoutTimer: WorkoutTimer(),
+        workoutLog: WorkoutLog(),
+        onReload: () async {},
+      )));
+      await tester.pumpAndSettle();
+
+      // A trained category shows a check on its pill; none logged => none.
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    });
+
     testWidgets("yesterday's set does not carry over", (tester) async {
       final yesterday = DateTime.now().subtract(const Duration(days: 1));
       await tester.pumpWidget(wrap(WorkoutTab(

@@ -92,6 +92,13 @@ class _WorkoutSessionState extends State<WorkoutSession> {
     final loggedToday = _loggedToday();
     final bests = _bestsByExercise();
 
+    // Categories with at least one exercise logged today — their pill lights up
+    // so it's obvious at a glance which muscle groups have been trained.
+    final doneCategories = <String>{
+      for (final name in loggedToday.keys)
+        if (_exerciseCategory[name] != null) _exerciseCategory[name]!,
+    };
+
     return Scaffold(
       backgroundColor: c.bg,
       body: Column(
@@ -135,24 +142,53 @@ class _WorkoutSessionState extends State<WorkoutSession> {
               itemBuilder: (context, i) {
                 final cat = _categories[i];
                 final active = cat == _active;
+                final done = doneCategories.contains(cat);
+                // Active pill stays accent; a trained-but-inactive category
+                // turns green; an untouched one stays neutral.
+                final bg = active
+                    ? c.accent
+                    : done
+                        ? c.green.withValues(alpha: 0.15)
+                        : c.surface2;
+                final border = active
+                    ? c.accent
+                    : done
+                        ? c.green
+                        : c.border;
+                final fg = active
+                    ? Colors.white
+                    : done
+                        ? c.green
+                        : c.textSecondary;
                 return GestureDetector(
                   onTap: () => setState(() => _active = cat),
                   child: Container(
                     alignment: Alignment.center,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: active ? c.accent : c.surface2,
-                      border: Border.all(color: active ? c.accent : c.border),
+                      color: bg,
+                      border: Border.all(color: border),
                       borderRadius: BorderRadius.circular(999),
                     ),
-                    child: Text(
-                      cat,
-                      style: AppTheme.display(
-                        color: active ? Colors.white : c.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (done) ...[
+                          Icon(Icons.check_circle,
+                              size: 14,
+                              color: active ? Colors.white : c.green),
+                          const SizedBox(width: 5),
+                        ],
+                        Text(
+                          cat,
+                          style: AppTheme.display(
+                            color: fg,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -1236,6 +1272,13 @@ class _SetState {
   String? loggedId;
 }
 
+/// Lower-cased exercise name → its category, so a logged entry can light up
+/// the category pill for the day.
+final Map<String, String> _exerciseCategory = {
+  for (final entry in _workoutData.entries)
+    for (final ex in entry.value) ex.name.toLowerCase(): entry.key,
+};
+
 const _workoutData = <String, List<_Exercise>>{
   'Chest': [
     _Exercise(
@@ -1364,6 +1407,76 @@ const _workoutData = <String, List<_Exercise>>{
         'Control the eccentric, no bounce',
       ],
     ),
+    _Exercise(
+      id: 'incline-barbell-press',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Incline_Bench_Press_-_Medium_Grip/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Incline_Bench_Press_-_Medium_Grip/1.jpg'],
+      name: 'Incline Barbell Press',
+      muscle: 'Chest · Shoulders · Triceps',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Lie back on an incline bench. Using a medium-width grip (a grip that creates a 90-degree angle…',
+        'As you breathe in, come down slowly until you feel the bar on you upper chest',
+        'After a second pause, bring the bar back to the starting position as you breathe out and push…',
+        'Repeat the movement for the prescribed amount of repetitions',
+      ],
+    ),
+    _Exercise(
+      id: 'dumbbell-flyes',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dumbbell_Flyes/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dumbbell_Flyes/1.jpg'],
+      name: 'Dumbbell Flyes',
+      muscle: 'Chest',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Lie down on a flat bench with a dumbbell on each hand resting on top of your thighs. The palms…',
+        'Then using your thighs to help raise the dumbbells, lift the dumbbells one at a time so you can…',
+        'With a slight bend on your elbows in order to prevent stress at the biceps tendon, lower your…',
+        'Return your arms back to the starting position as you squeeze your chest muscles and breathe…',
+      ],
+    ),
+    _Exercise(
+      id: 'pec-deck-butterfly',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Butterfly/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Butterfly/1.jpg'],
+      name: 'Pec Deck (Butterfly)',
+      muscle: 'Chest',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Sit on the machine with your back flat on the pad',
+        'Take hold of the handles. Tip: Your upper arms should be positioned parallel to the floor;…',
+        'Push the handles together slowly as you squeeze your chest in the middle. Breathe out during…',
+        'Return back to the starting position slowly as you inhale until your chest muscles are fully…',
+      ],
+    ),
+    _Exercise(
+      id: 'decline-dumbbell-press',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Decline_Dumbbell_Bench_Press/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Decline_Dumbbell_Bench_Press/1.jpg'],
+      name: 'Decline Dumbbell Press',
+      muscle: 'Chest · Shoulders · Triceps',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Secure your legs at the end of the decline bench and lie down with a dumbbell on each hand on…',
+        'Once you are laying down, move the dumbbells in front of you at shoulder width',
+        'Once at shoulder width, rotate your wrists forward so that the palms of your hands are facing…',
+        'Bring down the weights slowly to your side as you breathe out. Keep full control of the…',
+      ],
+    ),
+    _Exercise(
+      id: 'dumbbell-pullover',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Straight-Arm_Dumbbell_Pullover/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Straight-Arm_Dumbbell_Pullover/1.jpg'],
+      name: 'Dumbbell Pullover',
+      muscle: 'Chest · Lats · Shoulders',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Place a dumbbell standing up on a flat bench',
+        'Ensuring that the dumbbell stays securely placed at the top of the bench, lie perpendicular to…',
+        'Grasp the dumbbell with both hands and hold it straight over your chest at arms length. Both…',
+        'While keeping your arms straight, lower the weight slowly in an arc behind your head while…',
+      ],
+    ),
   ],
   'Shoulders': [
     _Exercise(
@@ -1462,6 +1575,76 @@ const _workoutData = <String, List<_Exercise>>{
         'Shrug shoulders straight up toward ears',
         'Hold the squeeze at the top',
         'Lower slowly, no rolling',
+      ],
+    ),
+    _Exercise(
+      id: 'upright-row',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Upright_Barbell_Row/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Upright_Barbell_Row/1.jpg'],
+      name: 'Upright Row',
+      muscle: 'Shoulders · Traps',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Grasp a barbell with an overhand grip that is slightly less than shoulder width. The bar should…',
+        'Now exhale and use the sides of your shoulders to lift the bar, raising your elbows up and to…',
+        'Lower the bar back down slowly to the starting position. Inhale as you perform this portion of…',
+        'Repeat for the recommended amount of repetitions',
+      ],
+    ),
+    _Exercise(
+      id: 'rear-delt-fly',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Reverse_Flyes/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Reverse_Flyes/1.jpg'],
+      name: 'Rear Delt Fly',
+      muscle: 'Shoulders',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'To begin, lie down on an incline bench with the chest and stomach pressing against the incline.…',
+        'Extend the arms in front of you so that they are perpendicular to the angle of the bench. The…',
+        'Maintaining the slight bend of the elbows, move the weights out and away from each other (to…',
+        'The arms should be elevated until they are parallel to the floor',
+      ],
+    ),
+    _Exercise(
+      id: 'reverse-pec-deck',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Reverse_Machine_Flyes/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Reverse_Machine_Flyes/1.jpg'],
+      name: 'Reverse Pec Deck',
+      muscle: 'Shoulders',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Adjust the handles so that they are fully to the rear. Make an appropriate weight selection and…',
+        'In a semicircular motion, pull your hands out to your side and back, contracting your rear…',
+        'Keep your arms slightly bent throughout the movement, with all of the motion occurring at the…',
+        'Pause at the rear of the movement, and slowly return the weight to the starting position',
+      ],
+    ),
+    _Exercise(
+      id: 'seated-military-press',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Seated_Barbell_Military_Press/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Seated_Barbell_Military_Press/1.jpg'],
+      name: 'Seated Military Press',
+      muscle: 'Shoulders · Triceps',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Sit on a Military Press Bench with a bar behind your head and either have a spotter give you…',
+        'Once you pick up the barbell with the correct grip length, lift the bar up over your head by…',
+        'Lower the bar down to the collarbone slowly as you inhale',
+        'Lift the bar back up to the starting position as you exhale',
+      ],
+    ),
+    _Exercise(
+      id: 'dumbbell-shrug',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dumbbell_Shrug/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dumbbell_Shrug/1.jpg'],
+      name: 'Dumbbell Shrug',
+      muscle: 'Traps',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Stand erect with a dumbbell on each hand (palms facing your torso), arms extended on the sides',
+        'Lift the dumbbells by elevating the shoulders as high as possible while you exhale. Hold the…',
+        'Lower the dumbbells back to the original position',
+        'Repeat for the recommended amount of repetitions',
       ],
     ),
   ],
@@ -1564,6 +1747,76 @@ const _workoutData = <String, List<_Exercise>>{
         'Lower slowly, full extension',
       ],
     ),
+    _Exercise(
+      id: 'spider-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Spider_Curl/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Spider_Curl/1.jpg'],
+      name: 'Spider Curl',
+      muscle: 'Biceps',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Start out by setting the bar on the part of the preacher bench that you would normally sit on.…',
+        'Move to the front side of the preacher bench (the part where the arms usually lay) and position…',
+        'Make sure that your feet (especially the toes) are well positioned on the floor and place your…',
+        'Use your arms to grab the barbell with a supinated grip (palms facing up) at about shoulder…',
+      ],
+    ),
+    _Exercise(
+      id: 'zottman-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Zottman_Curl/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Zottman_Curl/1.jpg'],
+      name: 'Zottman Curl',
+      muscle: 'Biceps · Forearms',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Stand up with your torso upright and a dumbbell in each hand being held at arms length. The…',
+        'Make sure the palms of the hands are facing each other. This will be your starting position',
+        'While holding the upper arm stationary, curl the weights while contracting the biceps as you…',
+        'Hold the contracted position for a second as you squeeze the biceps',
+      ],
+    ),
+    _Exercise(
+      id: 'machine-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Machine_Bicep_Curl/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Machine_Bicep_Curl/1.jpg'],
+      name: 'Machine Curl',
+      muscle: 'Biceps',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Adjust the seat to the appropriate height and make your weight selection. Place your upper arms…',
+        'Perform the movement by flexing the elbow, pulling your lower arm towards your upper arm',
+        'Pause at the top of the movement, and then slowly return the weight to the starting position',
+        'Avoid returning the weight all the way to the stops until the set is complete to keep tension…',
+      ],
+    ),
+    _Exercise(
+      id: 'cable-rope-hammer-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Hammer_Curls_-_Rope_Attachment/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Hammer_Curls_-_Rope_Attachment/1.jpg'],
+      name: 'Cable Rope Hammer Curl',
+      muscle: 'Biceps',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.cable,
+      steps: [
+        'Attach a rope attachment to a low pulley and stand facing the machine about 12 inches away from…',
+        'Grasp the rope with a neutral (palms-in) grip and stand straight up keeping the natural arch of…',
+        'Put your elbows in by your side and keep them there stationary during the entire movement. Tip:…',
+        'Using your biceps, pull your arms up as you exhale until your biceps touch your forearms. Tip:…',
+      ],
+    ),
+    _Exercise(
+      id: 'reverse-cable-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Reverse_Cable_Curl/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Reverse_Cable_Curl/1.jpg'],
+      name: 'Reverse Cable Curl',
+      muscle: 'Biceps · Forearms',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.cable,
+      steps: [
+        'Stand up with your torso upright while holding a bar attachment that is attached to a low…',
+        'While holding the upper arms stationary, curl the weights while contracting the biceps as you…',
+        'Slowly begin to bring the bar back to starting position as your breathe in',
+        'Repeat for the recommended amount of repetitions',
+      ],
+    ),
   ],
   'Tricep': [
     _Exercise(
@@ -1664,6 +1917,76 @@ const _workoutData = <String, List<_Exercise>>{
         'Lower slowly, keep elbow still',
       ],
     ),
+    _Exercise(
+      id: 'bench-dips',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Bench_Dips/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Bench_Dips/1.jpg'],
+      name: 'Bench Dips',
+      muscle: 'Triceps · Chest · Shoulders',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'For this exercise you will need to place a bench behind your back. With the bench perpendicular…',
+        'Slowly lower your body as you inhale by bending at the elbows until you lower yourself far…',
+        'Using your triceps to bring your torso up again, lift yourself back to the starting position',
+        'Repeat for the recommended amount of repetitions',
+      ],
+    ),
+    _Exercise(
+      id: 'overhead-rope-extension',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Rope_Overhead_Triceps_Extension/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Rope_Overhead_Triceps_Extension/1.jpg'],
+      name: 'Overhead Rope Extension',
+      muscle: 'Triceps',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.cable,
+      steps: [
+        'Attach a rope to the bottom pulley of the pulley machine',
+        'Grasping the rope with both hands, extend your arms with your hands directly above your head…',
+        'Slowly lower the rope behind your head as you hold the upper arms stationary. Inhale as you…',
+        'Return to the starting position by flexing your triceps as you breathe out',
+      ],
+    ),
+    _Exercise(
+      id: 'triceps-extension-machine',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Machine_Triceps_Extension/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Machine_Triceps_Extension/1.jpg'],
+      name: 'Triceps Extension Machine',
+      muscle: 'Triceps',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Adjust the seat to the appropriate height and make your weight selection. Place your upper arms…',
+        'Perform the movement by extending the elbow, pulling your lower arm away from your upper arm',
+        'Pause at the completion of the movement, and then slowly return the weight to the starting…',
+        'Avoid returning the weight all the way to the stops until the set is complete to keep tension…',
+      ],
+    ),
+    _Exercise(
+      id: 'reverse-grip-pushdown',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Reverse_Grip_Triceps_Pushdown/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Reverse_Grip_Triceps_Pushdown/1.jpg'],
+      name: 'Reverse-Grip Pushdown',
+      muscle: 'Triceps',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.cable,
+      steps: [
+        'Start by setting a bar attachment (straight or e-z) on a high pulley machine',
+        'Facing the bar attachment, grab it with the palms facing up (supinated grip) at shoulder width.…',
+        'Slowly elevate the bar attachment up as you inhale so it is aligned with your chest. Only the…',
+        'Then begin to lower the cable bar back down to the original staring position while exhaling and…',
+      ],
+    ),
+    _Exercise(
+      id: 'dip-machine',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dip_Machine/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dip_Machine/1.jpg'],
+      name: 'Dip Machine',
+      muscle: 'Triceps · Chest · Shoulders',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Sit securely in a dip machine, select the weight and firmly grasp the handles',
+        'Now keep your elbows in at your sides in order to place emphasis on the triceps. The elbows…',
+        'As you contract the triceps, extend your arms downwards as you exhale. Tip: At the bottom of…',
+        'Now slowly let your arms come back up to the starting position as you inhale',
+      ],
+    ),
   ],
   'Arms': [
     _Exercise(
@@ -1720,6 +2043,62 @@ const _workoutData = <String, List<_Exercise>>{
         'Stand tall, shoulders back, core braced',
         'Walk with short, controlled steps',
         'Set down under control',
+      ],
+    ),
+    _Exercise(
+      id: 'cable-wrist-curl',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Wrist_Curl/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Wrist_Curl/1.jpg'],
+      name: 'Cable Wrist Curl',
+      muscle: 'Forearms',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.cable,
+      steps: [
+        'Start out by placing a flat bench in front of a low pulley cable that has a straight bar…',
+        'Use your arms to grab the cable bar with a narrow to shoulder width supinated grip (palms up)…',
+        'Start out by curling your wrist upwards and exhaling. Keep the contraction for a second',
+        'Slowly lower your wrists back down to the starting position while inhaling',
+      ],
+    ),
+    _Exercise(
+      id: 'finger-curls',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Finger_Curls/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Finger_Curls/1.jpg'],
+      name: 'Finger Curls',
+      muscle: 'Forearms',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Hold a barbell with both hands and your palms facing up; hands spaced about shoulder width',
+        'Place your feet flat on the floor, at a distance that is slightly wider than shoulder width…',
+        'Lower the bar as far as possible by extending the fingers. Allowing the bar to roll down the…',
+        'Now curl bar up as high as possible by closing your hands while exhaling. Hold the contraction…',
+      ],
+    ),
+    _Exercise(
+      id: 'plate-pinch',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Plate_Pinch/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Plate_Pinch/1.jpg'],
+      name: 'Plate Pinch',
+      muscle: 'Forearms',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.back_hand,
+      steps: [
+        'Grab two wide-rimmed plates and put them together with the smooth sides facing outward',
+        'Use your fingers to grip the outside part of the plate and your thumb for the other side thus…',
+        'Squeeze the plate with your fingers and thumb. Hold this position for as long as you can',
+        'Repeat for the recommended amount of sets prescribed in your program',
+      ],
+    ),
+    _Exercise(
+      id: 'wrist-roller',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Wrist_Roller/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Wrist_Roller/1.jpg'],
+      name: 'Wrist Roller',
+      muscle: 'Forearms · Shoulders',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'To begin, stand straight up grabbing a wrist roller using a pronated grip (palms facing down).…',
+        'Slowly lift both arms until they are fully extended and parallel to the floor in front of you.…',
+        'Rotate one wrist at a time in an upward motion to bring the weight up to the bar by rolling the…',
+        'Once the weight has reached the bar, slowly begin to lower the weight back down by rotating the…',
       ],
     ),
   ],
@@ -1806,6 +2185,76 @@ const _workoutData = <String, List<_Exercise>>{
         'Row the handle to the chest',
         'Squeeze the shoulder blades',
         'Lower with control',
+      ],
+    ),
+    _Exercise(
+      id: 'chin-up',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Chin-Up/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Chin-Up/1.jpg'],
+      name: 'Chin-Up',
+      muscle: 'Lats · Biceps · Forearms',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Grab the pull-up bar with the palms facing your torso and a grip closer than the shoulder width',
+        'As you have both arms extended in front of you holding the bar at the chosen grip width, keep…',
+        'As you breathe out, pull your torso up until your head is around the level of the pull-up bar.…',
+        'After a second of squeezing the biceps in the contracted position, slowly lower your torso back…',
+      ],
+    ),
+    _Exercise(
+      id: 'one-arm-dumbbell-row',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/One-Arm_Dumbbell_Row/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/One-Arm_Dumbbell_Row/1.jpg'],
+      name: 'One-Arm Dumbbell Row',
+      muscle: 'Middle Back · Biceps · Lats',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Choose a flat bench and place a dumbbell on each side of it',
+        'Place the right leg on top of the end of the bench, bend your torso forward from the waist…',
+        'Use the left hand to pick up the dumbbell on the floor and hold the weight while keeping your…',
+        'Pull the resistance straight up to the side of your chest, keeping your upper arm close to your…',
+      ],
+    ),
+    _Exercise(
+      id: 'inverted-row',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Inverted_Row/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Inverted_Row/1.jpg'],
+      name: 'Inverted Row',
+      muscle: 'Middle Back · Lats',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Position a bar in a rack to about waist height. You can also use a smith machine',
+        'Take a wider than shoulder width grip on the bar and position yourself hanging underneath the…',
+        'Begin by flexing the elbow, pulling your chest towards the bar. Retract your shoulder blades as…',
+        'Pause at the top of the motion, and return yourself to the start position',
+      ],
+    ),
+    _Exercise(
+      id: 'sumo-deadlift',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Sumo_Deadlift/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Sumo_Deadlift/1.jpg'],
+      name: 'Sumo Deadlift',
+      muscle: 'Hamstrings · Adductors · Forearms',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Begin with a bar loaded on the ground. Approach the bar so that the bar intersects the middle…',
+        'Take a breath, and then lower your hips, looking forward with your head with your chest up.…',
+        'As the bar passes through the knees, lean back and drive the hips into the bar, pulling your…',
+        'Return the weight to the ground by bending at the hips and controlling the weight on the way…',
+      ],
+    ),
+    _Exercise(
+      id: 'back-extension',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Hyperextensions_Back_Extensions/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Hyperextensions_Back_Extensions/1.jpg'],
+      name: 'Back Extension',
+      muscle: 'Lower Back · Glutes · Hamstrings',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Lie face down on a hyperextension bench, tucking your ankles securely under the footpads',
+        'Adjust the upper pad if possible so your upper thighs lie flat across the wide pad, leaving…',
+        'With your body straight, cross your arms in front of you (my preference) or behind your head.…',
+        'Start bending forward slowly at the waist as far as you can while keeping your back flat.…',
       ],
     ),
   ],
@@ -1908,6 +2357,76 @@ const _workoutData = <String, List<_Exercise>>{
         'Lower slowly with control',
       ],
     ),
+    _Exercise(
+      id: 'sit-up',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Sit-Up/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Sit-Up/1.jpg'],
+      name: 'Sit-Up',
+      muscle: 'Abdominals',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.self_improvement,
+      steps: [
+        'Lie down on the floor placing your feet either under something that will not move or by having…',
+        'Place your hands behind your head and lock them together by clasping your fingers. This is the…',
+        'Elevate your upper body so that it creates an imaginary V-shape with your thighs. Breathe out…',
+        'Once you feel the contraction for a second, lower your upper body back down to the starting…',
+      ],
+    ),
+    _Exercise(
+      id: 'cable-crunch',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Crunch/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Crunch/1.jpg'],
+      name: 'Cable Crunch',
+      muscle: 'Abdominals',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.cable,
+      steps: [
+        'Kneel below a high pulley that contains a rope attachment',
+        'Grasp cable rope attachment and lower the rope until your hands are placed next to your face',
+        'Flex your hips slightly and allow the weight to hyperextend the lower back. This will be your…',
+        'With the hips stationary, flex the waist as you contract the abs so that the elbows travel…',
+      ],
+    ),
+    _Exercise(
+      id: 'flutter-kicks',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Flutter_Kicks/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Flutter_Kicks/1.jpg'],
+      name: 'Flutter Kicks',
+      muscle: 'Glutes · Hamstrings',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.self_improvement,
+      steps: [
+        'On a flat bench lie facedown with the hips on the edge of the bench, the legs straight with…',
+        'Squeeze your glutes and hamstrings and straighten the legs until they are level with the hips.…',
+        'Start the movement by lifting the left leg higher than the right leg',
+        'Then lower the left leg as you lift the right leg',
+      ],
+    ),
+    _Exercise(
+      id: 'ab-crunch-machine',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Ab_Crunch_Machine/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Ab_Crunch_Machine/1.jpg'],
+      name: 'Ab Crunch Machine',
+      muscle: 'Abdominals',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Select a light resistance and sit down on the ab machine placing your feet under the pads…',
+        'At the same time, begin to lift the legs up as you crunch your upper torso. Breathe out as you…',
+        'After a second pause, slowly return to the starting position as you breathe in',
+        'Repeat the movement for the prescribed amount of repetitions',
+      ],
+    ),
+    _Exercise(
+      id: 'toe-touches',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Toe_Touchers/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Toe_Touchers/1.jpg'],
+      name: 'Toe Touches',
+      muscle: 'Abdominals',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.self_improvement,
+      steps: [
+        'To begin, lie down on the floor or an exercise mat with your back pressed against the floor.…',
+        'Your legs should be touching each other. Slowly elevate your legs up in the air until they are…',
+        'Move your arms so that they are fully extended at a 45 degree angle from the floor. This is the…',
+        'While keeping your lower back pressed against the floor, slowly lift your torso and use your…',
+      ],
+    ),
   ],
   'Legs': [
     _Exercise(
@@ -2006,6 +2525,88 @@ const _workoutData = <String, List<_Exercise>>{
         'Rise up onto the toes as high as possible',
         'Squeeze the calves at the top',
         'Lower slowly for a deep stretch',
+      ],
+    ),
+    _Exercise(
+      id: 'front-squat',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Front_Barbell_Squat/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Front_Barbell_Squat/1.jpg'],
+      name: 'Front Squat',
+      muscle: 'Quadriceps · Calves · Glutes',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'This exercise is best performed inside a squat rack for safety purposes. To begin, first set…',
+        'Lift the bar off the rack by first pushing with your legs and at the same time straightening…',
+        'Step away from the rack and position your legs using a shoulder width medium stance with the…',
+        'Begin to slowly lower the bar by bending the knees as you maintain a straight posture with the…',
+      ],
+    ),
+    _Exercise(
+      id: 'goblet-squat',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Goblet_Squat/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Goblet_Squat/1.jpg'],
+      name: 'Goblet Squat',
+      muscle: 'Quadriceps · Calves · Glutes',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Stand holding a light kettlebell by the horns close to your chest. This will be your starting…',
+        'Squat down between your legs until your hamstrings are on your calves. Keep your chest and head…',
+        'At the bottom position, pause and use your elbows to push your knees out. Return to the…',
+      ],
+    ),
+    _Exercise(
+      id: 'bulgarian-split-squat',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Split_Squat_with_Dumbbells/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Split_Squat_with_Dumbbells/1.jpg'],
+      name: 'Bulgarian Split Squat',
+      muscle: 'Quadriceps · Glutes · Hamstrings',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Position yourself into a staggered stance with the rear foot elevated and front foot forward',
+        'Hold a dumbbell in each hand, letting them hang at the sides. This will be your starting…',
+        'Begin by descending, flexing your knee and hip to lower your body down. Maintain good posture…',
+        'At the bottom of the movement, drive through the heel to extend the knee and hip to return to…',
+      ],
+    ),
+    _Exercise(
+      id: 'hip-thrust',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Hip_Thrust/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Hip_Thrust/1.jpg'],
+      name: 'Hip Thrust',
+      muscle: 'Glutes · Calves · Hamstrings',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Begin seated on the ground with a bench directly behind you. Have a loaded barbell over your…',
+        'Roll the bar so that it is directly above your hips, and lean back against the bench so that…',
+        'Begin the movement by driving through your feet, extending your hips vertically through the…',
+      ],
+    ),
+    _Exercise(
+      id: 'hack-squat',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Hack_Squat/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Hack_Squat/1.jpg'],
+      name: 'Hack Squat',
+      muscle: 'Quadriceps · Calves · Glutes',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Place the back of your torso against the back pad of the machine and hook your shoulders under…',
+        'Position your legs in the platform using a shoulder width medium stance with the toes slightly…',
+        'Place your arms on the side handles of the machine and disengage the safety bars (which on most…',
+        'Now straighten your legs without locking the knees. This will be your starting position. (Note:…',
+      ],
+    ),
+    _Exercise(
+      id: 'seated-calf-raise',
+      images: ['https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Seated_Calf_Raise/0.jpg', 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Seated_Calf_Raise/1.jpg'],
+      name: 'Seated Calf Raise',
+      muscle: 'Calves',
+      sets: [_SetSpec(12), _SetSpec(10), _SetSpec(8)],
+      icon: Icons.fitness_center,
+      steps: [
+        'Sit on the machine and place your toes on the lower portion of the platform provided with the…',
+        'Place your lower thighs under the lever pad, which will need to be adjusted according to the…',
+        'Lift the lever slightly by pushing your heels up and release the safety bar. This will be your…',
+        'Slowly lower your heels by bending at the ankles until the calves are fully stretched. Inhale…',
       ],
     ),
   ],
