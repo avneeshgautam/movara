@@ -66,8 +66,11 @@ jobs:
           echo "$out"
           if [ $code -ne 0 ]; then
             # Surface the real wrangler error as an annotation, which is readable
-            # via the GitHub API without a logged-in session (logs are not).
-            msg=$(printf '%s' "$out" | tail -12 | tr '\n' '|' | sed 's/%/%25/g')
+            # via the GitHub API without a logged-in session (logs are not). Grab
+            # the error-bearing lines wherever they are in the output.
+            msg=$(printf '%s' "$out" \
+              | grep -iE 'error|failed|code:|permission|forbidden|denied|status|✘|✗' \
+              | head -20 | tr '\n' '|' | sed 's/%/%25/g')
             echo "::error::WRANGLER_DEPLOY_FAIL: $msg"
             exit 1
           fi
