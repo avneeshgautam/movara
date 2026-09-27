@@ -8,6 +8,8 @@ name: Deploy frontend to Cloudflare Pages
 #   (GitHub repo -> Settings -> Secrets and variables -> Actions).
 # The token needs the "Cloudflare Pages: Edit" permission.
 
+# Git integration is disconnected on the Cloudflare Pages project so that this
+# Direct Upload (wrangler pages deploy) is allowed to publish the pre-built app.
 on:
   push:
     branches: [first-build]
