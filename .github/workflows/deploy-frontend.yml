@@ -41,12 +41,17 @@ jobs:
           # Account id is not secret (it appears in dashboard URLs).
           CLOUDFLARE_ACCOUNT_ID: 65ade6a68860ad7b630077ff6f3e4f5c
         run: |
+          set -x
+          # Validate the token up front: whoami prints the account on success and
+          # exits non-zero with a clear auth message on a bad/misscoped token.
+          npx --yes wrangler@3 --version
+          npx --yes wrangler@3 whoami
           # The original movara-9ol project was created via Git integration, so
           # Cloudflare keeps refusing Direct Upload to it even after the repo is
           # disconnected (project type is fixed at creation). Deploy instead to a
           # dedicated Direct-Upload project, creating it on first run.
-          npx wrangler@3 pages project create movara-app \
+          npx --yes wrangler@3 pages project create movara-app \
             --production-branch=first-build \
-            || echo "project create skipped (already exists or create failed — deploy will report if it is auth)"
-          npx wrangler@3 pages deploy frontend/build/web \
+            || echo "project create skipped (exists already, or create failed above)"
+          npx --yes wrangler@3 pages deploy frontend/build/web \
             --project-name=movara-app --branch=first-build
