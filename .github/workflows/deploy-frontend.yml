@@ -36,13 +36,17 @@ jobs:
             --dart-define=API_BASE_URL=https://movara-backend-h22y.onrender.com/api
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           # Account id is not secret (it appears in dashboard URLs).
-          accountId: 65ade6a68860ad7b630077ff6f3e4f5c
-          # --branch=first-build matches the project's production branch, so
-          # this lands on the root movara-9ol *.pages.dev URL rather than a
-          # throwaway preview alias. Direct Upload requires the Pages project
-          # to have NO connected Git repo (disconnect it in the dashboard).
-          command: pages deploy frontend/build/web --project-name=movara-9ol --branch=first-build
+          CLOUDFLARE_ACCOUNT_ID: 65ade6a68860ad7b630077ff6f3e4f5c
+        run: |
+          # The original movara-9ol project was created via Git integration, so
+          # Cloudflare keeps refusing Direct Upload to it even after the repo is
+          # disconnected (project type is fixed at creation). Deploy instead to a
+          # dedicated Direct-Upload project, creating it on first run.
+          npx wrangler@3 pages project create movara-app \
+            --production-branch=first-build \
+            || echo "project create skipped (already exists or create failed — deploy will report if it is auth)"
+          npx wrangler@3 pages deploy frontend/build/web \
+            --project-name=movara-app --branch=first-build
