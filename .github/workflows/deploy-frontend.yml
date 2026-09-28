@@ -31,23 +31,28 @@ jobs:
           flutter-version: 3.47.5
 
       # The Firebase web config lives in the gitignored firebase.env locally.
-      # In CI it comes from the FIREBASE_ENV repository secret (the file's
-      # contents, KEY=value lines), so nothing is committed to the repo.
+      # In CI it comes from one repository secret per key, so nothing is
+      # committed to the repo.
       - name: Build web
         working-directory: frontend
         env:
-          FIREBASE_ENV: ${{ secrets.FIREBASE_ENV }}
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
         run: |
           flutter pub get
-          defines="--dart-define=API_BASE_URL=https://movara-backend-h22y.onrender.com/api"
-          if [ -n "$FIREBASE_ENV" ]; then
-            printf '%s\n' "$FIREBASE_ENV" > firebase.env
-            defines="--dart-define-from-file=firebase.env $defines"
-          else
-            echo "::warning::FIREBASE_ENV secret not set; the web app will show its setup screen."
+          if [ -z "$FIREBASE_API_KEY" ] || [ -z "$FIREBASE_PROJECT_ID" ] || [ -z "$FIREBASE_APP_ID" ]; then
+            echo "::warning::Firebase secrets missing; the web app will show its setup screen."
           fi
-          flutter build web --release $defines
-          rm -f firebase.env
+          flutter build web --release \
+            --dart-define=API_BASE_URL=https://movara-backend-h22y.onrender.com/api \
+            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \
+            --dart-define=FIREBASE_AUTH_DOMAIN="$FIREBASE_AUTH_DOMAIN" \
+            --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
+            --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \
+            --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID"
 
       # Each step's pass/fail is visible through the GitHub API without reading
       # logs, and failures are surfaced as ::error:: annotations (also readable
