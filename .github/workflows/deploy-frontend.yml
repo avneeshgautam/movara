@@ -4,7 +4,7 @@ name: Deploy frontend to Cloudflare Pages
 # that touches the frontend. Runs the Flutter build in CI (Cloudflare's own
 # build image has no Flutter), so the compiled app is always current.
 #
-# One-time setup: add a repository secret CLOUDFLARE_API_TOKEN
+# One-time setup: add a repository secret CLOUDFLARE_API_TOKEN (Pages: Edit)
 #   (GitHub repo -> Settings -> Secrets and variables -> Actions).
 # The token needs the "Cloudflare Pages: Edit" permission.
 
