@@ -27,13 +27,27 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned to the local toolchain so CI builds match what is tested.
+          flutter-version: 3.47.5
 
+      # The Firebase web config lives in the gitignored firebase.env locally.
+      # In CI it comes from the FIREBASE_ENV repository secret (the file's
+      # contents, KEY=value lines), so nothing is committed to the repo.
       - name: Build web
         working-directory: frontend
+        env:
+          FIREBASE_ENV: ${{ secrets.FIREBASE_ENV }}
         run: |
           flutter pub get
-          flutter build web --release \
-            --dart-define=API_BASE_URL=https://movara-backend-h22y.onrender.com/api
+          defines="--dart-define=API_BASE_URL=https://movara-backend-h22y.onrender.com/api"
+          if [ -n "$FIREBASE_ENV" ]; then
+            printf '%s\n' "$FIREBASE_ENV" > firebase.env
+            defines="--dart-define-from-file=firebase.env $defines"
+          else
+            echo "::warning::FIREBASE_ENV secret not set; the web app will show its setup screen."
+          fi
+          flutter build web --release $defines
+          rm -f firebase.env
 
       # Each step's pass/fail is visible through the GitHub API without reading
       # logs, and failures are surfaced as ::error:: annotations (also readable

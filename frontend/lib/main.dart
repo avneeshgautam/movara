@@ -50,8 +50,11 @@ class _MovaraAppState extends State<MovaraApp> {
   /// Built once, not per build. A fresh AuthService on every rebuild (e.g. a
   /// theme toggle) hands AuthGate a new auth stream, which drops its
   /// StreamBuilder back to the loading state and rebuilds the whole shell --
-  /// losing the current tab.
-  final AuthService _auth = AuthService();
+  /// losing the current tab. `late` so it is only created once Firebase is
+  /// ready: AuthService touches FirebaseAuth.instance, which throws when the
+  /// build has no Firebase config -- that crashed the whole app to a grey
+  /// screen instead of showing the setup message.
+  late final AuthService _auth = AuthService();
 
   @override
   Widget build(BuildContext context) {
