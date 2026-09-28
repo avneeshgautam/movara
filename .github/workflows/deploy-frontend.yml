@@ -45,6 +45,24 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: 65ade6a68860ad7b630077ff6f3e4f5c
         run: npx --yes wrangler@3 whoami
 
+      # Ask Cloudflare directly what THIS token can do, and surface it as an
+      # annotation (no token value is printed). Pinpoints the missing permission.
+      - name: Diagnose token permissions
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          acct=65ade6a68860ad7b630077ff6f3e4f5c
+          h="Authorization: Bearer $CF_TOKEN"
+          verify=$(curl -s -H "$h" https://api.cloudflare.com/client/v4/user/tokens/verify \
+            | python3 -c 'import json,sys;d=json.load(sys.stdin);print("ok" if d.get("success") else "err:"+str(d.get("errors")))' 2>/dev/null || echo parsefail)
+          user_http=$(curl -s -o /dev/null -w '%{http_code}' -H "$h" https://api.cloudflare.com/client/v4/user)
+          pages=$(curl -s -H "$h" "https://api.cloudflare.com/client/v4/accounts/$acct/pages/projects" \
+            | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+print("ok" if d.get("success") else "err:"+str(d.get("errors")))' 2>/dev/null || echo parsefail)
+          echo "::error::TOKEN_DIAG verify=$verify | user_details_http=$user_http | pages_access=$pages"
+          exit 0
+
       - name: Create Direct-Upload Pages project
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
