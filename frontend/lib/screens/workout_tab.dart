@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/workout_entry.dart';
@@ -37,7 +39,25 @@ class WorkoutTab extends StatefulWidget {
 
 class _WorkoutTabState extends State<WorkoutTab> {
   bool _showHistory = false;
+  Timer? _reloadTimer;
 
+  @override
+  void dispose() {
+    _reloadTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Refresh the shared entry list (Home stats, History, PRs) once things
+  /// settle, instead of a full server round trip after every single tap.
+  void _scheduleReload() {
+    _reloadTimer?.cancel();
+    _reloadTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) widget.onReload();
+    });
+  }
+
+  // The set cards update instantly and only need the saved entry's id back,
+  // so these return as soon as the write lands rather than after a reload.
   Future<String?> _logSet(String exerciseName, int reps, double weightKg) async {
     try {
       final entry = await widget.api.addWorkoutEntry(WorkoutEntry(
@@ -47,7 +67,7 @@ class _WorkoutTabState extends State<WorkoutTab> {
         weightKg: weightKg > 0 ? weightKg : null,
         performedAt: DateTime.now(),
       ));
-      await widget.onReload();
+      _scheduleReload();
       return entry.id;
     } catch (_) {
       return null;
@@ -57,10 +77,10 @@ class _WorkoutTabState extends State<WorkoutTab> {
   Future<void> _unlogSet(String entryId) async {
     try {
       await widget.api.deleteWorkoutEntry(entryId);
-      await widget.onReload();
     } catch (_) {
       // Best-effort; the next reload reconciles.
     }
+    _scheduleReload();
   }
 
   @override

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/workout_entry.dart';
 import '../theme/app_theme.dart';
@@ -300,66 +301,115 @@ class _ExerciseCardState extends State<_ExerciseCard> {
   String _signature(List<WorkoutEntry> entries) =>
       entries.map((e) => e.id ?? '').join(',');
 
-  /// Rebuild the set rows from today's logged entries.
+  /// Reconcile the set rows with today's logged entries from the server.
   ///
-  /// The first N rows mirror the N sets logged today (ticked, with the reps
-  /// and weight actually performed). Rows beyond that keep any local
-  /// reps/weight edits the user has made but are never left ticked.
+  /// Local state wins while a set is saving: a server refresh never un-ticks
+  /// or re-ticks a row that still has a write in flight. Settled rows are
+  /// matched to entries by id (not by position), so the row you tapped is the
+  /// row that stays ticked. Entries no row knows about (logged on another
+  /// device, or a fresh mount) fill the first free rows.
   List<_SetState> _merge(List<_SetState> current) {
     final logged = widget.todayEntries;
     final defaults = widget.exercise.sets;
 
-    // Keep however many rows the user is currently working with, but always
-    // show at least every set logged today.
-    final baseline = current.isEmpty ? defaults.length : current.length;
-    final total = logged.length > baseline ? logged.length : baseline;
+    if (current.isEmpty) {
+      final total =
+          logged.length > defaults.length ? logged.length : defaults.length;
+      return [
+        for (var i = 0; i < total; i++)
+          if (i < logged.length)
+            (_SetState(reps: logged[i].reps, weight: logged[i].weightKg ?? 0)
+              ..done = true
+              ..loggedId = logged[i].id)
+          else
+            _SetState(
+                reps: (i < defaults.length ? defaults[i] : defaults.last).reps,
+                weight:
+                    (i < defaults.length ? defaults[i] : defaults.last).weight),
+      ];
+    }
 
-    final result = <_SetState>[];
-    for (var i = 0; i < total; i++) {
-      if (i < logged.length) {
-        final entry = logged[i];
-        result.add(
-          _SetState(reps: entry.reps, weight: entry.weightKg ?? 0)
-            ..done = true
-            ..loggedId = entry.id,
-        );
-      } else if (i < current.length) {
-        // Preserve local edits, but this row is not logged, so never ticked.
-        final existing = current[i]
+    final ids = {for (final e in logged) if (e.id != null) e.id!};
+    final claimed = <String>{};
+    final anyPending = current.any((r) => r.pending);
+
+    for (final row in current) {
+      if (row.pending) {
+        if (row.loggedId != null) claimed.add(row.loggedId!);
+        continue; // mid-save: leave exactly as the user set it
+      }
+      final id = row.loggedId;
+      if (id != null && ids.contains(id)) {
+        row.done = true;
+        claimed.add(id);
+      } else {
+        // Never saved, or deleted elsewhere.
+        row
           ..done = false
           ..loggedId = null;
-        result.add(existing);
-      } else {
-        final spec = i < defaults.length ? defaults[i] : defaults.last;
-        result.add(_SetState(reps: spec.reps, weight: spec.weight));
       }
     }
-    return result;
+
+    // While anything is saving, an unclaimed entry may belong to that save;
+    // wait for the next refresh rather than ticking the wrong row.
+    if (!anyPending) {
+      final result = [...current];
+      for (final e in logged) {
+        if (e.id == null || claimed.contains(e.id)) continue;
+        final free = result.indexWhere((r) => !r.done && r.loggedId == null);
+        final row = _SetState(reps: e.reps, weight: e.weightKg ?? 0)
+          ..done = true
+          ..loggedId = e.id;
+        if (free == -1) {
+          result.add(row);
+        } else {
+          result[free] = row;
+        }
+      }
+      return result;
+    }
+    return current;
   }
 
-  Future<void> _toggleDone(int i) async {
+  /// Flip the tick immediately; save in the background. Every tap is
+  /// honoured -- rapid taps queue behind each other per set instead of
+  /// racing, and the final server state always matches the final tick.
+  void _toggleDone(int i) {
     final set = _sets[i];
-    // Optimistically flip; reconcile with backend result.
-    if (!set.done) {
-      setState(() => set.done = true);
+    HapticFeedback.selectionClick();
+    setState(() => set.done = !set.done);
+    _queueSync(set);
+  }
+
+  void _queueSync(_SetState set) {
+    set.inFlight++;
+    set.sync = set.sync.then((_) => _reconcile(set)).whenComplete(() {
+      set.inFlight--;
+      if (mounted) setState(() {});
+    });
+  }
+
+  /// Make the server match what the user currently wants for [set].
+  Future<void> _reconcile(_SetState set) async {
+    if (set.done && set.loggedId == null) {
       final id = await widget.onLogSet(
         widget.exercise.name,
         set.reps,
         set.weight,
       );
-      if (!mounted) return;
-      if (id == null) {
-        setState(() => set.done = false); // logging failed, revert
-      } else {
-        set.loggedId = id;
+      if (id != null) {
+        set.loggedId = id; // a later queued sync unlogs it if since un-ticked
+      } else if (set.done && set.loggedId == null && mounted) {
+        setState(() => set.done = false);
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+          content: Text("Couldn't save that set — check your connection."),
+          duration: Duration(seconds: 2),
+        ));
       }
-    } else {
-      final id = set.loggedId;
-      setState(() {
-        set.done = false;
-        set.loggedId = null;
-      });
-      if (id != null) await widget.onUnlogSet(id);
+    } else if (!set.done && set.loggedId != null) {
+      final id = set.loggedId!;
+      set.loggedId = null;
+      await widget.onUnlogSet(id);
     }
   }
 
@@ -445,10 +495,13 @@ class _ExerciseCardState extends State<_ExerciseCard> {
     setState(() => _sets.add(_SetState(reps: last.reps, weight: last.weight)));
   }
 
-  Future<void> _removeSet(int i) async {
-    final id = _sets[i].loggedId;
+  void _removeSet(int i) {
+    final set = _sets[i];
     setState(() => _sets.removeAt(i));
-    if (id != null) await widget.onUnlogSet(id);
+    if (set.done || set.loggedId != null || set.pending) {
+      set.done = false;
+      _queueSync(set);
+    }
   }
 
   bool get _hasBest {
@@ -692,7 +745,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
     final s = _sets[i];
 
     final row = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(6, 2, 10, 2),
       decoration: BoxDecoration(
         color: s.done ? c.accentSoft : c.surface2,
         border: Border.all(color: s.done ? c.accent.withValues(alpha: 0.35) : c.border),
@@ -702,23 +755,29 @@ class _ExerciseCardState extends State<_ExerciseCard> {
         children: [
           // Done toggle — opaque hit test so the whole circle is tappable.
           GestureDetector(
+            key: ValueKey('set-tick-$i'),
             behavior: HitTestBehavior.opaque,
             onTap: () => _toggleDone(i),
-            child: Container(
-              width: 26,
-              height: 26,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: s.done ? c.accent : c.surface3,
-                shape: BoxShape.circle,
-                border: Border.all(color: s.done ? c.accent : c.border, width: 1.5),
+            // Larger touch target around the 26px circle so fast taps land
+            // on the intended set; the padding also provides the gap after.
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 10, 8),
+              child: Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: s.done ? c.accent : c.surface3,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: s.done ? c.accent : c.border, width: 1.5),
+                ),
+                child: s.done
+                    ? const Icon(Icons.check, size: 15, color: Colors.white)
+                    : null,
               ),
-              child: s.done
-                  ? const Icon(Icons.check, size: 15, color: Colors.white)
-                  : null,
             ),
           ),
-          const SizedBox(width: 8),
           SizedBox(
             width: 30,
             child: Text(
@@ -1268,8 +1327,18 @@ class _SetState {
   _SetState({required this.reps, this.weight = 0});
   int reps;
   double weight;
+
+  /// What the user sees and wants. Flipped instantly on tap.
   bool done = false;
+
+  /// The server entry currently backing this set, once saved.
   String? loggedId;
+
+  /// Server writes for this set run one after another on this chain, so rapid
+  /// taps can never interleave (e.g. an unlog racing an in-flight log).
+  Future<void> sync = Future.value();
+  int inFlight = 0;
+  bool get pending => inFlight > 0;
 }
 
 /// Lower-cased exercise name → its category, so a logged entry can light up
