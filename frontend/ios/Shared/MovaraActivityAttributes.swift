@@ -18,5 +18,7 @@ struct MovaraActivityAttributes: ActivityAttributes {
   var emoji: String
   /// When recording began — the widget derives a self-ticking timer from this.
   var startedAt: Date
+  /// False for gym workouts, which have a timer but no distance.
+  var showsDistance: Bool
 }
 #endif

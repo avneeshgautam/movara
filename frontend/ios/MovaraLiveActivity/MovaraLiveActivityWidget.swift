@@ -28,13 +28,15 @@ struct MovaraLiveActivityWidget: Widget {
             .font(.system(size: 30, weight: .bold, design: .rounded))
             .monospacedDigit()
           Spacer()
-          VStack(alignment: .trailing, spacing: 2) {
-            Text(String(format: "%.2f", context.state.distanceKm))
-              .font(.system(size: 22, weight: .bold, design: .rounded))
-              .monospacedDigit()
-            Text("km")
-              .font(.caption2)
-              .foregroundColor(.secondary)
+          if context.attributes.showsDistance {
+            VStack(alignment: .trailing, spacing: 2) {
+              Text(String(format: "%.2f", context.state.distanceKm))
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .monospacedDigit()
+              Text("km")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            }
           }
         }
       }
@@ -47,10 +49,12 @@ struct MovaraLiveActivityWidget: Widget {
           Text(context.attributes.emoji).font(.title2)
         }
         DynamicIslandExpandedRegion(.trailing) {
-          VStack(alignment: .trailing) {
-            Text(String(format: "%.2f km", context.state.distanceKm))
-              .font(.headline)
-              .monospacedDigit()
+          if context.attributes.showsDistance {
+            VStack(alignment: .trailing) {
+              Text(String(format: "%.2f km", context.state.distanceKm))
+                .font(.headline)
+                .monospacedDigit()
+            }
           }
         }
         DynamicIslandExpandedRegion(.center) {

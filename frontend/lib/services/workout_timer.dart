@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'live_activity.dart';
+
 /// Stopwatch for the whole workout session, shown above the exercises.
 ///
 /// Elapsed time is derived from the wall clock (not a counted ticker), so it
@@ -91,7 +93,10 @@ class WorkoutTimer extends ChangeNotifier {
           sinceMs == null ? null : DateTime.fromMillisecondsSinceEpoch(sinceMs);
     }
     _loaded = true;
-    if (isRunning) _startTicker();
+    if (isRunning) {
+      _startTicker();
+      _showLiveActivity(); // relaunched mid-workout: bring the card back
+    }
     notifyListeners();
   }
 
@@ -99,9 +104,19 @@ class WorkoutTimer extends ChangeNotifier {
     if (isRunning) return;
     _runningSince = DateTime.now();
     _startTicker();
+    _showLiveActivity();
     await _persist();
     notifyListeners();
   }
+
+  /// Lock Screen / Dynamic Island timer for the gym session. Backdated by
+  /// the banked time so resuming shows the workout's full length.
+  void _showLiveActivity() => LiveActivity.start(
+        'Workout',
+        '🏋️',
+        showsDistance: false,
+        elapsed: elapsed,
+      );
 
   Future<void> pause() async {
     final since = _runningSince;
@@ -109,14 +124,17 @@ class WorkoutTimer extends ChangeNotifier {
     _banked += DateTime.now().difference(since);
     _runningSince = null;
     _stopTicker();
+    LiveActivity.end(); // a paused timer must not keep ticking on the lock screen
     await _persist();
     notifyListeners();
   }
 
   Future<void> reset() async {
+    final wasActive = isRunning || _banked > Duration.zero;
     _banked = Duration.zero;
     _runningSince = null;
     _stopTicker();
+    if (wasActive) LiveActivity.end();
     await _persist();
     notifyListeners();
   }

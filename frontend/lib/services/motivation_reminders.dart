@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/chat_message.dart';
 import 'api_service.dart';
 import 'water_notifications.dart';
@@ -56,6 +58,30 @@ class MotivationReminders {
       title: 'Movara · Gym time 🏋️',
       body: gym,
     );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kVersion, _scheduleVersion);
+  }
+
+  /// Bumped when the scheduling logic changes so existing installs get their
+  /// daily notifications rebuilt. v2: scheduled in the phone's own timezone
+  /// (v1 used UTC, so 6am/5pm arrived at 11:30am/10:30pm in India).
+  static const _scheduleVersion = 2;
+  static const _kToggle = 'toggle_Gym Motivation';
+  static const _kVersion = 'gym_motivation_schedule_v';
+
+  /// Called at launch. If the user has Gym Motivation on but the OS no longer
+  /// holds the notifications (an older build wiped them on every launch), or
+  /// they were scheduled by an older version, schedule them again. Does
+  /// nothing -- and makes no AI call -- when they are already in place.
+  Future<void> ensureScheduled() async {
+    if (!isSupported) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_kToggle) != true) return;
+    final current = prefs.getInt(_kVersion) == _scheduleVersion &&
+        await _notif.isScheduled(_wakeId) &&
+        await _notif.isScheduled(_gymId);
+    if (current) return;
+    await enable();
   }
 
   Future<void> disable() async {

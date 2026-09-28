@@ -61,6 +61,9 @@ class _FakeNotifications implements WaterNotifications {
 
   @override
   Future<void> cancel(int id) async {}
+
+  @override
+  Future<bool> isScheduled(int id) async => false;
 }
 
 void main() {

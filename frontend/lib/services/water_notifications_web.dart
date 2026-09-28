@@ -52,6 +52,8 @@ class WaterNotifications {
     required int count,
   }) async {}
 
+  Future<bool> isScheduled(int id) async => false;
+
   Future<void> cancelAll() async {}
 
   // The browser can't schedule notifications for a closed tab.

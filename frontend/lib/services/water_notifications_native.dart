@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -42,6 +43,14 @@ class WaterNotifications {
   Future<void> _ensureInit() async {
     if (_ready || !isSupported) return;
     tz.initializeTimeZones();
+    // Without this tz.local stays UTC, so "6:00" meant 6:00 UTC (11:30 in
+    // India) and the daily motivation notifications arrived hours off.
+    try {
+      final zone = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(zone.identifier));
+    } catch (_) {
+      // Unknown zone name: keep UTC rather than failing to schedule at all.
+    }
     await _plugin.initialize(
       settings: const InitializationSettings(
         iOS: DarwinInitializationSettings(
@@ -113,10 +122,27 @@ class WaterNotifications {
     }
   }
 
+  /// Ids at or above this are daily notifications (gym motivation) that are
+  /// owned elsewhere; water-reminder ids (baseId * 1000 + n) stay below it.
+  static const dailyIdFloor = 900000;
+
+  /// Cancels every water reminder. Daily notifications are left alone: this
+  /// runs on every app launch, and a blanket cancel used to wipe the 6am/5pm
+  /// gym motivation notifications each time the app was opened.
   Future<void> cancelAll() async {
     if (!isSupported) return;
     await _ensureInit();
-    await _plugin.cancelAll();
+    for (final p in await _plugin.pendingNotificationRequests()) {
+      if (p.id < dailyIdFloor) await _plugin.cancel(id: p.id);
+    }
+  }
+
+  /// Whether a notification with [id] is currently queued with the OS.
+  Future<bool> isScheduled(int id) async {
+    if (!isSupported) return false;
+    await _ensureInit();
+    final pending = await _plugin.pendingNotificationRequests();
+    return pending.any((p) => p.id == id);
   }
 
   /// Schedules a notification that repeats every day at [hour]:[minute].

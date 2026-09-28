@@ -12,10 +12,22 @@ class LiveActivity {
   static bool get _supported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
-  static Future<void> start(String label, String emoji) async {
+  /// [elapsed] backdates the Lock Screen timer (a resumed gym workout keeps
+  /// its total); [showsDistance] hides the km readout for gym workouts.
+  static Future<void> start(
+    String label,
+    String emoji, {
+    bool showsDistance = true,
+    Duration elapsed = Duration.zero,
+  }) async {
     if (!_supported) return;
     try {
-      await _channel.invokeMethod('start', {'label': label, 'emoji': emoji});
+      await _channel.invokeMethod('start', {
+        'label': label,
+        'emoji': emoji,
+        'showsDistance': showsDistance,
+        'elapsedSeconds': elapsed.inMilliseconds / 1000,
+      });
     } catch (_) {}
   }
 

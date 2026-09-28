@@ -35,11 +35,27 @@ enum LiveActivityBridge {
   @available(iOS 16.1, *)
   private static func start(_ args: [String: Any]?) {
     guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-    end() // never stack two
+    // Never stack two -- but end only the activities that exist *now*. The
+    // old code called end() here, whose Task ran after the request below and
+    // ended every activity, including the one just started, so the card
+    // vanished immediately.
+    let previous = Activity<MovaraActivityAttributes>.activities
+    if !previous.isEmpty {
+      Task {
+        for activity in previous {
+          await activity.end(dismissalPolicy: .immediate)
+        }
+      }
+    }
     let label = args?["label"] as? String ?? "Activity"
     let emoji = args?["emoji"] as? String ?? "🏃"
+    // Backdated so a resumed timer shows its full elapsed time.
+    let elapsed = (args?["elapsedSeconds"] as? NSNumber)?.doubleValue ?? 0
+    let showsDistance = args?["showsDistance"] as? Bool ?? true
     let attributes = MovaraActivityAttributes(
-      activityLabel: label, emoji: emoji, startedAt: Date())
+      activityLabel: label, emoji: emoji,
+      startedAt: Date().addingTimeInterval(-elapsed),
+      showsDistance: showsDistance)
     let state = MovaraActivityAttributes.ContentState(distanceKm: 0)
     do {
       _ = try Activity.request(

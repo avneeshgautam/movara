@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/reminder_scheduler.dart';
 import '../services/chat_controller.dart';
 import '../services/goal_store.dart';
+import '../services/motivation_reminders.dart';
 import '../services/run_store.dart';
 import '../models/run_record.dart' show formatDuration;
 import '../services/workout_timer.dart';
@@ -61,6 +62,8 @@ class _HomeShellState extends State<HomeShell> {
     super.initState();
     _entriesFuture = _api.fetchWorkoutEntries();
     _reminders.load();
+    // Restore the 6am/5pm gym notifications if they're on but missing.
+    MotivationReminders(_api).ensureScheduled();
     _runs.load();
     _workoutTimer.load();
     _workoutLog.load();
