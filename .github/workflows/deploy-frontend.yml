@@ -35,42 +35,36 @@ jobs:
           flutter build web --release \
             --dart-define=API_BASE_URL=https://movara-backend-h22y.onrender.com/api
 
-      # Split into separate steps so the run's per-step pass/fail (visible via
-      # the API without reading logs) pinpoints the cause: if "Validate token"
-      # fails it's the CLOUDFLARE_API_TOKEN secret; if that passes but a later
-      # step fails, the token is fine and the problem is the project/deploy.
-      - name: Validate token (wrangler whoami)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 65ade6a68860ad7b630077ff6f3e4f5c
-        run: npx --yes wrangler@3 whoami
-
-      # Ask Cloudflare directly what THIS token can do, and surface it as an
-      # annotation (no token value is printed). Pinpoints the missing permission.
-      - name: Diagnose token permissions
+      # Each step's pass/fail is visible through the GitHub API without reading
+      # logs, and failures are surfaced as ::error:: annotations (also readable
+      # without logging in). No token value is ever printed.
+      - name: Diagnose token (direct Cloudflare API)
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCT: 65ade6a68860ad7b630077ff6f3e4f5c
         run: |
-          acct=65ade6a68860ad7b630077ff6f3e4f5c
           h="Authorization: Bearer $CF_TOKEN"
-          verify=$(curl -s -H "$h" https://api.cloudflare.com/client/v4/user/tokens/verify \
-            | python3 -c 'import json,sys;d=json.load(sys.stdin);print("ok" if d.get("success") else "err:"+str(d.get("errors")))' 2>/dev/null || echo parsefail)
-          user_http=$(curl -s -o /dev/null -w '%{http_code}' -H "$h" https://api.cloudflare.com/client/v4/user)
-          pages=$(curl -s -H "$h" "https://api.cloudflare.com/client/v4/accounts/$acct/pages/projects" \
-            | python3 -c 'import json,sys
-d=json.load(sys.stdin)
-print("ok" if d.get("success") else "err:"+str(d.get("errors")))' 2>/dev/null || echo parsefail)
-          echo "::error::TOKEN_DIAG verify=$verify | user_details_http=$user_http | pages_access=$pages"
-          exit 0
+          api=https://api.cloudflare.com/client/v4
+          user_verify=$(curl -s -H "$h" "$api/user/tokens/verify" | jq -c '{ok: .success, status: .result.status, err: [.errors[]?.code]}')
+          acct_verify=$(curl -s -H "$h" "$api/accounts/$ACCT/tokens/verify" | jq -c '{ok: .success, status: .result.status, err: [.errors[]?.code]}')
+          user_http=$(curl -s -o /dev/null -w '%{http_code}' -H "$h" "$api/user")
+          pages=$(curl -s -H "$h" "$api/accounts/$ACCT/pages/projects" | jq -c '{ok: .success, err: [.errors[]? | "\(.code) \(.message)"], projects: [.result[]?.name]}')
+          echo "::error::TOKEN_DIAG len=${#CF_TOKEN} user_verify=$user_verify acct_verify=$acct_verify user_http=$user_http pages=$pages"
 
       - name: Create Direct-Upload Pages project
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 65ade6a68860ad7b630077ff6f3e4f5c
         run: |
-          npx --yes wrangler@3 pages project create movara-app \
-            --production-branch=first-build \
-            || echo "project create skipped (already exists)"
+          set +e
+          out=$(npx --yes wrangler@4 pages project create movara-app --production-branch=first-build 2>&1)
+          code=$?
+          echo "$out"
+          if [ $code -ne 0 ] && ! printf '%s' "$out" | grep -qi 'already exists'; then
+            msg=$(printf '%s' "$out" | grep -iE 'error|code|permission' | head -8 | tr '\n' '|')
+            echo "::error::WRANGLER_CREATE_FAIL: $msg"
+            exit 1
+          fi
 
       - name: Deploy to Cloudflare Pages
         env:
@@ -78,19 +72,11 @@ print("ok" if d.get("success") else "err:"+str(d.get("errors")))' 2>/dev/null ||
           CLOUDFLARE_ACCOUNT_ID: 65ade6a68860ad7b630077ff6f3e4f5c
         run: |
           set +e
-          out=$(npx --yes wrangler@3 pages deploy frontend/build/web \
-            --project-name=movara-app --branch=first-build 2>&1)
+          out=$(npx --yes wrangler@4 pages deploy frontend/build/web --project-name=movara-app --branch=first-build 2>&1)
           code=$?
           echo "$out"
           if [ $code -ne 0 ]; then
-            # Surface the real wrangler error as an annotation, which is readable
-            # via the GitHub API without a logged-in session (logs are not). Grab
-            # the error-bearing lines wherever they are in the output.
-            msg=$(printf '%s' "$out" \
-              | grep -iE 'error|failed|code:|permission|forbidden|denied|status|✘|✗' \
-              | head -20 | tr '\n' '|' | sed 's/%/%25/g')
+            msg=$(printf '%s' "$out" | grep -iE 'error|failed|code|permission' | head -12 | tr '\n' '|')
             echo "::error::WRANGLER_DEPLOY_FAIL: $msg"
             exit 1
           fi
-
-# redeploy trigger: retest CLOUDFLARE_API_TOKEN permissions (2026-09-28T15:45:24Z)
