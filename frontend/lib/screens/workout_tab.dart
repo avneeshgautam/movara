@@ -7,7 +7,6 @@ import '../services/workout_log.dart';
 import '../services/workout_timer.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
-import '../widgets/badges_grid.dart';
 import 'workout_history.dart';
 import 'workout_session.dart';
 
@@ -161,52 +160,89 @@ class WorkoutSessionCard extends StatelessWidget {
       builder: (context, _) {
         final count = log.countToday();
         final active = timer.isRunning || timer.elapsed > Duration.zero;
-        final longest = log.longestSeconds;
+        final today = log.timeToday();
+        // One compact row so the exercise list keeps the screen. The
+        // longest-workout record lives on Home.
         return Container(
-          padding: const EdgeInsets.all(14),
+          height: 56,
+          padding: const EdgeInsets.only(left: 14, right: 8),
           decoration: BoxDecoration(
             color: c.surface,
-            border: Border.all(color: c.border),
-            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: active ? c.accent : c.border),
+            borderRadius: BorderRadius.circular(14),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Text('TODAY',
-                      style: AppTheme.display(
-                          color: c.textMuted,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1)),
-                  const Spacer(),
-                  _pill(context,
-                      '$count workout${count == 1 ? '' : 's'}', c.accent),
-                  if (log.timeToday() > Duration.zero) ...[
-                    const SizedBox(width: 8),
-                    _pill(context, formatWorkoutDuration(log.timeToday()),
-                        c.textSecondary),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (!active)
-                _StartButton(onTap: timer.start)
-              else
-                _ActiveControls(
-                  elapsed: formatDuration(timer.elapsed),
-                  running: timer.isRunning,
-                  onFinish: () => _finish(context),
-                  onPauseResume: timer.isRunning ? timer.pause : timer.start,
-                  onDiscard: () => _discard(context),
+              if (!active) ...[
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('$count workout${count == 1 ? '' : 's'} today',
+                          style: AppTheme.display(
+                              color: c.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800)),
+                      if (today > Duration.zero)
+                        Text('${formatWorkoutDuration(today)} trained',
+                            style:
+                                TextStyle(color: c.textMuted, fontSize: 11)),
+                    ],
+                  ),
                 ),
-              const SizedBox(height: 12),
-              WorkoutRecordChip(
-                hasRecord: longest > 0,
-                longestLabel:
-                    formatWorkoutDuration(Duration(seconds: longest)),
-              ),
+                _pillButton(
+                  context,
+                  icon: Icons.play_arrow_rounded,
+                  label: 'Start',
+                  color: c.accent,
+                  onTap: timer.start,
+                ),
+              ] else ...[
+                // Scales down instead of overflowing on narrow phones or
+                // once the timer reaches hours.
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.timer_rounded, color: c.accent, size: 18),
+                        const SizedBox(width: 6),
+                        Text(formatDuration(timer.elapsed),
+                            style: AppTheme.display(
+                                color: c.textPrimary,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800)),
+                        const SizedBox(width: 6),
+                        Text(timer.isRunning ? 'live' : 'paused',
+                            style:
+                                TextStyle(color: c.textMuted, fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _iconButton(
+                  context,
+                  timer.isRunning
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                  timer.isRunning ? timer.pause : timer.start,
+                ),
+                const SizedBox(width: 6),
+                _iconButton(
+                    context, Icons.close_rounded, () => _discard(context)),
+                const SizedBox(width: 6),
+                _pillButton(
+                  context,
+                  icon: Icons.check_rounded,
+                  label: 'Finish',
+                  color: c.green,
+                  onTap: () => _finish(context),
+                ),
+              ],
             ],
           ),
         );
@@ -214,149 +250,54 @@ class WorkoutSessionCard extends StatelessWidget {
     );
   }
 
-  Widget _pill(BuildContext context, String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(text,
-          style: AppTheme.display(
-              color: color, fontSize: 12, fontWeight: FontWeight.w800)),
-    );
-  }
-}
-
-class _StartButton extends StatelessWidget {
-  const _StartButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.movara;
+  Widget _pillButton(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        height: 50,
-        alignment: Alignment.center,
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: c.accent,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-                color: c.accentGlow, blurRadius: 14, offset: const Offset(0, 4)),
-          ],
+          color: color,
+          borderRadius: BorderRadius.circular(999),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
-            const SizedBox(width: 6),
-            Text('Start Workout',
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 4),
+            Text(label,
                 style: AppTheme.display(
                     color: Colors.white,
-                    fontSize: 16,
+                    fontSize: 13,
                     fontWeight: FontWeight.w800)),
           ],
         ),
       ),
     );
   }
-}
 
-class _ActiveControls extends StatelessWidget {
-  const _ActiveControls({
-    required this.elapsed,
-    required this.running,
-    required this.onFinish,
-    required this.onPauseResume,
-    required this.onDiscard,
-  });
-
-  final String elapsed;
-  final bool running;
-  final VoidCallback onFinish;
-  final VoidCallback onPauseResume;
-  final VoidCallback onDiscard;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.movara;
-    return Column(
-      children: [
-        Row(
-          children: [
-            Icon(Icons.timer_rounded, color: c.accent, size: 20),
-            const SizedBox(width: 8),
-            Text(elapsed,
-                style: AppTheme.display(
-                    color: c.textPrimary,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800)),
-            const SizedBox(width: 8),
-            Text(running ? 'in progress' : 'paused',
-                style: TextStyle(color: c.textMuted, fontSize: 12)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: onFinish,
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  height: 46,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: c.green,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.check_rounded,
-                          color: Colors.white, size: 22),
-                      const SizedBox(width: 6),
-                      Text('Finish Workout',
-                          style: AppTheme.display(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            _iconBtn(context, running ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                onPauseResume),
-            const SizedBox(width: 8),
-            _iconBtn(context, Icons.close_rounded, onDiscard),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _iconBtn(BuildContext context, IconData icon, VoidCallback onTap) {
+  Widget _iconButton(BuildContext context, IconData icon, VoidCallback onTap) {
     final c = context.movara;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        width: 46,
-        height: 46,
+        width: 38,
+        height: 38,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: c.surface2,
           border: Border.all(color: c.border),
-          borderRadius: BorderRadius.circular(14),
+          shape: BoxShape.circle,
         ),
-        child: Icon(icon, color: c.textSecondary, size: 22),
+        child: Icon(icon, color: c.textSecondary, size: 20),
       ),
     );
   }

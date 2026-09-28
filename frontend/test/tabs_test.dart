@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:movara_app/models/workout_entry.dart';
 import 'package:movara_app/services/run_store.dart';
@@ -262,6 +263,42 @@ void main() {
       await tester.tap(find.text('Bench Press'));
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.check), findsNothing);
+    });
+  });
+  group('WorkoutSessionCard', () {
+    testWidgets('idle and running states fit one row on a narrow phone',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(375, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final timer = WorkoutTimer();
+      final log = WorkoutLog();
+      await tester.pumpWidget(wrap(Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: WorkoutSessionCard(timer: timer, log: log),
+        ),
+      )));
+      await tester.pump();
+
+      expect(find.text('0 workouts today'), findsOneWidget);
+      expect(find.text('Start'), findsOneWidget);
+      // The longest-workout record moved to Home.
+      expect(find.text('Longest Workout'), findsNothing);
+
+      await tester.tap(find.text('Start'));
+      // start() persists before notifying; let that future complete.
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.text('Finish'), findsOneWidget);
+      expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
+      expect(tester.takeException(), isNull); // no RenderFlex overflow
+
+      await tester.runAsync(timer.reset);
+      timer.dispose();
     });
   });
 }
