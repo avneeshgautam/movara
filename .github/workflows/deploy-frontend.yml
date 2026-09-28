@@ -54,22 +54,8 @@ jobs:
             --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \
             --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID"
 
-      # Each step's pass/fail is visible through the GitHub API without reading
-      # logs, and failures are surfaced as ::error:: annotations (also readable
-      # without logging in). No token value is ever printed.
-      - name: Diagnose token (direct Cloudflare API)
-        env:
-          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          ACCT: 65ade6a68860ad7b630077ff6f3e4f5c
-        run: |
-          h="Authorization: Bearer $CF_TOKEN"
-          api=https://api.cloudflare.com/client/v4
-          user_verify=$(curl -s -H "$h" "$api/user/tokens/verify" | jq -c '{ok: .success, status: .result.status, err: [.errors[]?.code]}')
-          acct_verify=$(curl -s -H "$h" "$api/accounts/$ACCT/tokens/verify" | jq -c '{ok: .success, status: .result.status, err: [.errors[]?.code]}')
-          user_http=$(curl -s -o /dev/null -w '%{http_code}' -H "$h" "$api/user")
-          pages=$(curl -s -H "$h" "$api/accounts/$ACCT/pages/projects" | jq -c '{ok: .success, err: [.errors[]? | "\(.code) \(.message)"], projects: [.result[]?.name]}')
-          echo "::error::TOKEN_DIAG len=${#CF_TOKEN} user_verify=$user_verify acct_verify=$acct_verify user_http=$user_http pages=$pages"
-
+      # create/deploy surface wrangler's real error as an ::error:: annotation on
+      # failure; annotations are readable via the GitHub API without a login.
       - name: Create Direct-Upload Pages project
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
