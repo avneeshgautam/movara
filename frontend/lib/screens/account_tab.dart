@@ -1295,7 +1295,13 @@ class _AccountTabState extends State<AccountTab> {
                 }),
             const SizedBox(height: 8),
             _downloadRow(context,
-                icon: '🤖', label: 'Android APK', sub: 'Coming soon'),
+                icon: '🤖',
+                label: 'Android APK',
+                sub: 'Download, then allow "install unknown apps"',
+                onTap: () {
+                  Navigator.pop(context);
+                  _launch(_apkUrl);
+                }),
             const SizedBox(height: 8),
             _downloadRow(context,
                 icon: '▶️', label: 'Google Play', sub: 'Coming soon'),
@@ -1362,7 +1368,11 @@ class _AccountTabState extends State<AccountTab> {
     );
   }
 
-  static const _webUrl = 'https://movara-9ol-84z.pages.dev';
+  static const _webUrl = 'https://movara-app.pages.dev';
+
+  /// Rebuilt by CI on every frontend push; this URL always serves the latest.
+  static const _apkUrl =
+      'https://github.com/avneeshgautam/movara/releases/download/android-latest/movara.apk';
 
   Future<void> _launch(String url) async {
     final uri = Uri.parse(url);

@@ -1,0 +1,87 @@
+name: Build Android APK
+
+# Builds a signed release APK on every push to first-build that touches the
+# frontend and publishes it as movara.apk on the "android-latest" GitHub
+# release. The app's Download App button links to that fixed URL:
+#   https://github.com/avneeshgautam/movara/releases/download/android-latest/movara.apk
+# Separate from the web deploy so one can't block the other.
+#
+# Repository secrets:
+#   ANDROID_SIGNING       base64 tar.gz of android/key.properties and
+#                         android/app/upload-keystore.jks (the release key)
+#   GOOGLE_SERVICES_JSON  base64 of android/app/google-services.json
+#                         (optional until the Android app is in Firebase)
+
+on:
+  push:
+    branches: [first-build]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/android-apk.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # create/update the android-latest release
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.5
+
+      - name: Restore signing key and Firebase config
+        working-directory: frontend/android
+        env:
+          ANDROID_SIGNING: ${{ secrets.ANDROID_SIGNING }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$ANDROID_SIGNING" ]; then
+            # A debug-signed APK couldn't be updated later by a properly
+            # signed one, so never publish without the real key.
+            echo "::error::ANDROID_SIGNING secret is missing; not publishing an APK."
+            exit 1
+          fi
+          printf '%s' "$ANDROID_SIGNING" | base64 -d | tar -xz
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" | base64 -d > app/google-services.json
+          else
+            echo "::warning::GOOGLE_SERVICES_JSON not set; the APK will show its Firebase setup screen."
+          fi
+
+      - name: Build APK
+        working-directory: frontend
+        run: |
+          flutter pub get
+          # run_number keeps versionCode increasing so updates install over
+          # the previous version.
+          flutter build apk --release \
+            --build-number=${{ github.run_number }} \
+            --dart-define=API_BASE_URL=https://movara-backend-h22y.onrender.com/api
+
+      - name: Publish to the android-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cp frontend/build/app/outputs/flutter-apk/app-release.apk movara.apk
+          notes="Build ${{ github.run_number }} from ${GITHUB_SHA::7}. Download movara.apk on your Android phone and allow installing unknown apps."
+          if ! gh release view android-latest >/dev/null 2>&1; then
+            gh release create android-latest --prerelease \
+              --title "Movara for Android (latest)" --notes "$notes"
+          fi
+          gh release upload android-latest movara.apk --clobber
+          gh release edit android-latest --notes "$notes"

@@ -22,10 +22,10 @@ class HealthService {
   ];
 
   /// HealthKit / Health Connect only exist on a real mobile device.
+  /// Apple Health only for now. Android's equivalent (Health Connect) needs
+  /// its own manifest setup and permission flow, which isn't wired yet.
   bool get isSupported =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.iOS ||
-          defaultTargetPlatform == TargetPlatform.android);
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   /// Lazily builds and configures the plugin (never on the web).
   Future<Health?> _ready() async {

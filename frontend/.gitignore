@@ -24,3 +24,6 @@ firebase.env
 # Firebase iOS config. Not secret (it ships inside the app), but kept out of
 # git so GitHub's secret scanner stays quiet, like firebase.env.
 ios/Runner/GoogleService-Info.plist
+
+# Firebase Android config, same reasoning as the iOS plist.
+android/app/google-services.json

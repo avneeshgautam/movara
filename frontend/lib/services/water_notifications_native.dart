@@ -28,15 +28,21 @@ class WaterNotifications {
       presentBadge: true,
       presentSound: true,
     ),
+    android: AndroidNotificationDetails(
+      'movara_reminders',
+      'Reminders',
+      channelDescription: 'Water, stretch and gym motivation reminders',
+      importance: Importance.high,
+      priority: Priority.high,
+    ),
   );
 
-  /// Only iOS is set up here. Android needs its own channel and icon
-  /// settings, and the desktop VM (which the tests run on) has no plugin at
-  /// all — claiming support there makes initialize() throw.
-  bool get isSupported => Platform.isIOS;
+  /// iOS and Android. The desktop VM (which the tests run on) has no plugin
+  /// at all — claiming support there makes initialize() throw.
+  bool get isSupported => Platform.isIOS || Platform.isAndroid;
 
-  /// iOS holds the schedule itself, so the app need not be running.
-  bool get schedulesInBackground => Platform.isIOS;
+  /// The OS holds the schedule itself, so the app need not be running.
+  bool get schedulesInBackground => isSupported;
 
   String get permission => isSupported ? _permission : 'unsupported';
 
@@ -53,6 +59,7 @@ class WaterNotifications {
     }
     await _plugin.initialize(
       settings: const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         iOS: DarwinInitializationSettings(
           // Asked for explicitly when the user turns reminders on, so the
           // prompt has context rather than appearing at first launch.
@@ -68,14 +75,22 @@ class WaterNotifications {
   Future<String> requestPermission() async {
     if (!isSupported) return 'unsupported';
     await _ensureInit();
-    final ios = _plugin.resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
-    final granted = await ios?.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-        ) ??
-        false;
+    final bool granted;
+    if (Platform.isAndroid) {
+      // Android 13+ shows a prompt; older versions grant at install.
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      granted = await android?.requestNotificationsPermission() ?? true;
+    } else {
+      final ios = _plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      granted = await ios?.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+          ) ??
+          false;
+    }
     _permission = granted ? 'granted' : 'denied';
     return _permission;
   }
