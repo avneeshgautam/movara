@@ -6,9 +6,10 @@ import '../models/chat_message.dart';
 import 'api_service.dart';
 import 'water_notifications.dart';
 
-/// Daily motivation notifications: a morning wake-up (6am) and a gym nudge
-/// (5pm). The message is written by the app's AI assistant when it can be
-/// reached, and falls back to a curated pool otherwise.
+/// Daily motivation notifications: a morning wake-up and an evening gym nudge,
+/// at times the user picks (default 6:00 AM and 5:00 PM). The message is
+/// written by the app's AI assistant when it can be reached, and falls back to
+/// a curated pool otherwise.
 class MotivationReminders {
   const MotivationReminders(this._api);
 
@@ -40,21 +41,43 @@ class MotivationReminders {
     "Consistency beats intensity. Show up today — you've got this.",
   ];
 
-  /// Schedules both daily notifications (call after permission is granted).
+  static const defaultMorningMinute = 6 * 60;
+  static const defaultEveningMinute = 17 * 60;
+  static const _kMorning = 'gym_motivation_morning_min';
+  static const _kEvening = 'gym_motivation_evening_min';
+
+  /// The user's chosen times, as minutes after midnight.
+  static Future<({int morning, int evening})> times() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (
+      morning: prefs.getInt(_kMorning) ?? defaultMorningMinute,
+      evening: prefs.getInt(_kEvening) ?? defaultEveningMinute,
+    );
+  }
+
+  static Future<void> saveTimes({required int morning, required int evening}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kMorning, morning);
+    await prefs.setInt(_kEvening, evening);
+  }
+
+  /// Schedules both daily notifications at the saved times (call after
+  /// permission is granted). Re-calling replaces the previous schedule.
   Future<void> enable() async {
+    final t = await times();
     final wake = await _line(morning: true, pool: _wakeMessages);
     final gym = await _line(morning: false, pool: _gymMessages);
     await _notif.scheduleDailyAt(
       id: _wakeId,
-      hour: 6,
-      minute: 0,
+      hour: t.morning ~/ 60,
+      minute: t.morning % 60,
       title: 'Movara · Wake up 🌅',
       body: wake,
     );
     await _notif.scheduleDailyAt(
       id: _gymId,
-      hour: 17,
-      minute: 0,
+      hour: t.evening ~/ 60,
+      minute: t.evening % 60,
       title: 'Movara · Gym time 🏋️',
       body: gym,
     );
@@ -95,7 +118,7 @@ class MotivationReminders {
       final prompt = morning
           ? 'Write ONE short punchy morning wake-up motivation line for a gym '
               "app notification. Max 90 characters, at most one emoji, no quotes."
-          : 'Write ONE short punchy 5pm "time to hit the gym" motivation line '
+          : 'Write ONE short punchy "time to hit the gym" motivation line '
               'for a notification. Max 90 characters, at most one emoji, no quotes.';
       final reply =
           await _api.sendChat([ChatMessage(role: 'user', content: prompt)]);

@@ -201,6 +201,40 @@ void main() {
     });
   });
 
+  group('Gym Motivation times', () {
+    testWidgets('row shows saved times; tapping it opens the time picker',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'gym_motivation_morning_min': 7 * 60 + 30,
+        'gym_motivation_evening_min': 18 * 60 + 30,
+      });
+      await tester.pumpWidget(wrap(AccountTab(
+        api: ApiService(),
+        entriesFuture: Future.value(const <WorkoutEntry>[]),
+        runStore: RunStore(),
+        workoutLog: WorkoutLog(),
+      )));
+      await tester.pumpAndSettle();
+
+      final row = find.text('7:30 AM & 6:30 PM · tap to change');
+      expect(row, findsOneWidget);
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(find.text('Morning wake-up'), findsOneWidget);
+      expect(find.text('Evening gym'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // Tapping the row edits times; it must not flip the switch on.
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('toggle_Gym Motivation'), isNot(true));
+    });
+  });
+
   group('completed sets persist for the day', () {
     WorkoutEntry loggedBenchPress(DateTime when) => WorkoutEntry(
           id: 'logged-1',

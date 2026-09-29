@@ -62,6 +62,10 @@ class _AccountTabState extends State<AccountTab> {
   /// everyone else on the leaderboard. Empty until it loads.
   String _badge = '';
 
+  /// Gym motivation times, minutes after midnight.
+  int _morningMin = MotivationReminders.defaultMorningMinute;
+  int _eveningMin = MotivationReminders.defaultEveningMinute;
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +73,44 @@ class _AccountTabState extends State<AccountTab> {
     _loadBody();
     _loadToggles();
     _loadBadge();
+    _loadMotivationTimes();
+  }
+
+  Future<void> _loadMotivationTimes() async {
+    final t = await MotivationReminders.times();
+    if (!mounted) return;
+    setState(() {
+      _morningMin = t.morning;
+      _eveningMin = t.evening;
+    });
+  }
+
+  String _clock(int minute) => MaterialLocalizations.of(context)
+      .formatTimeOfDay(TimeOfDay(hour: minute ~/ 60, minute: minute % 60));
+
+  /// Pick the morning and evening motivation times; reschedules right away
+  /// when Gym Motivation is on.
+  Future<void> _editMotivationTimes() async {
+    final picked = await showDialog<({int morning, int evening})>(
+      context: context,
+      builder: (_) => _MotivationTimesDialog(
+          morning: _morningMin, evening: _eveningMin),
+    );
+    if (picked == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    await MotivationReminders.saveTimes(
+        morning: picked.morning, evening: picked.evening);
+    setState(() {
+      _morningMin = picked.morning;
+      _eveningMin = picked.evening;
+    });
+    if (_toggles['Gym Motivation'] ?? false) {
+      await MotivationReminders(widget.api).enable();
+    }
+    messenger.showSnackBar(SnackBar(
+      content: Text('Motivation times: ${_clock(picked.morning)} wake-up & '
+          '${_clock(picked.evening)} gym.'),
+    ));
   }
 
   /// Trend/percentile logic: compare the user's leaderboard rank against the
@@ -139,8 +181,9 @@ class _AccountTabState extends State<AccountTab> {
         return;
       }
       await reminders.enable();
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Motivation set: 6am wake-up & 5pm gym. 💪'),
+      messenger.showSnackBar(SnackBar(
+        content: Text('Motivation set: ${_clock(_morningMin)} wake-up & '
+            '${_clock(_eveningMin)} gym. 💪'),
       ));
     } else {
       await reminders.disable();
@@ -888,8 +931,11 @@ class _AccountTabState extends State<AccountTab> {
               onTap: () => _comingSoon(context, 'Heart rate zones')),
           _MenuAction('🩺', 'Health Metrics',
               onTap: () => _comingSoon(context, 'Health metrics')),
-          _MenuAction('🏋️', 'Gym Motivation · 6am & 5pm',
-              toggleKey: 'Gym Motivation'),
+          _MenuAction('🏋️', 'Gym Motivation',
+              subtitle: '${_clock(_morningMin)} & ${_clock(_eveningMin)} · '
+                  'tap to change',
+              toggleKey: 'Gym Motivation',
+              onTap: _editMotivationTimes),
           _MenuAction('😴', 'Sleep Tracking', toggleKey: 'Sleep Tracking'),
         ],
       ),
@@ -930,9 +976,8 @@ class _AccountTabState extends State<AccountTab> {
           ? BoxDecoration(border: Border(top: BorderSide(color: c.border)))
           : null,
       child: InkWell(
-        onTap: isToggle
-            ? () => _setToggle(key, !(_toggles[key] ?? false))
-            : item.onTap,
+        onTap: item.onTap ??
+            (isToggle ? () => _setToggle(key, !(_toggles[key] ?? false)) : null),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
@@ -945,13 +990,24 @@ class _AccountTabState extends State<AccountTab> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(item.label,
-                    style: TextStyle(
-                      color:
-                          item.danger ? const Color(0xFFEF4444) : c.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    )),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.label,
+                        style: TextStyle(
+                          color: item.danger
+                              ? const Color(0xFFEF4444)
+                              : c.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        )),
+                    if (item.subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(item.subtitle!,
+                          style: TextStyle(color: c.textMuted, fontSize: 11)),
+                    ],
+                  ],
+                ),
               ),
               if (isToggle)
                 _switch(context, _toggles[key] ?? false,
@@ -1370,12 +1426,120 @@ String _fmt(double v) =>
 
 class _MenuAction {
   _MenuAction(this.icon, this.label,
-      {this.onTap, this.danger = false, this.toggleKey});
+      {this.onTap, this.danger = false, this.toggleKey, this.subtitle});
   final String icon;
   final String label;
   final VoidCallback? onTap;
   final bool danger;
   final String? toggleKey;
+  final String? subtitle;
+}
+
+/// Morning and evening time pickers for Gym Motivation.
+class _MotivationTimesDialog extends StatefulWidget {
+  const _MotivationTimesDialog({required this.morning, required this.evening});
+
+  final int morning;
+  final int evening;
+
+  @override
+  State<_MotivationTimesDialog> createState() => _MotivationTimesDialogState();
+}
+
+class _MotivationTimesDialogState extends State<_MotivationTimesDialog> {
+  late int _morning = widget.morning;
+  late int _evening = widget.evening;
+
+  Future<void> _pick({required bool morning}) async {
+    final current = morning ? _morning : _evening;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: current ~/ 60, minute: current % 60),
+      helpText: morning ? 'MORNING WAKE-UP' : 'EVENING GYM',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      final m = picked.hour * 60 + picked.minute;
+      if (morning) {
+        _morning = m;
+      } else {
+        _evening = m;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+    return AlertDialog(
+      backgroundColor: c.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text('Gym Motivation',
+          style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Pick when each daily nudge arrives.',
+              style: TextStyle(color: c.textMuted, fontSize: 12)),
+          const SizedBox(height: 14),
+          _slot(context, '🌅', 'Morning wake-up', _morning, true),
+          const SizedBox(height: 10),
+          _slot(context, '🏋️', 'Evening gym', _evening, false),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: c.textMuted))),
+        ElevatedButton(
+          onPressed: () =>
+              Navigator.pop(context, (morning: _morning, evening: _evening)),
+          style: ElevatedButton.styleFrom(
+              backgroundColor: c.accent, foregroundColor: Colors.white),
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+
+  Widget _slot(BuildContext context, String emoji, String label, int minute,
+      bool morning) {
+    final c = context.movara;
+    final time = MaterialLocalizations.of(context)
+        .formatTimeOfDay(TimeOfDay(hour: minute ~/ 60, minute: minute % 60));
+    return GestureDetector(
+      key: ValueKey('motivation-${morning ? 'morning' : 'evening'}'),
+      onTap: () => _pick(morning: morning),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: c.surface2,
+          border: Border.all(color: c.border),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 18)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: c.textSecondary, fontSize: 13)),
+            ),
+            Text(time,
+                style: AppTheme.display(
+                    color: c.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700)),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, size: 18, color: c.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _Record {
