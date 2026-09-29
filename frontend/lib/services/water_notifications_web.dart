@@ -48,8 +48,7 @@ class WaterNotifications {
     required int baseId,
     required String title,
     required String body,
-    required int everyMinutes,
-    required int count,
+    required List<DateTime> at,
   }) async {}
 
   Future<bool> isScheduled(int id) async => false;

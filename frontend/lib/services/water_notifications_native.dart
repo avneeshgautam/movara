@@ -96,26 +96,24 @@ class WaterNotifications {
   /// pending, so the scheduler shares this budget across reminders.
   static const maxSeries = _maxScheduled;
 
-  /// Queues a rolling series for one reminder: [count] notifications
-  /// [everyMinutes] apart, with ids namespaced by [baseId] so they can be
-  /// cancelled without touching other reminders.
+  /// Queues a rolling series for one reminder at the given times (already
+  /// filtered to its active hours), with ids namespaced by [baseId] so they
+  /// can be cancelled without touching other reminders.
   Future<void> scheduleReminder({
     required int baseId,
     required String title,
     required String body,
-    required int everyMinutes,
-    required int count,
+    required List<DateTime> at,
   }) async {
     if (!isSupported) return;
     await _ensureInit();
 
-    final now = tz.TZDateTime.now(tz.local);
-    for (var i = 1; i <= count; i++) {
+    for (var i = 0; i < at.length; i++) {
       await _plugin.zonedSchedule(
-        id: baseId * 1000 + i,
+        id: baseId * 1000 + i + 1,
         title: title,
         body: body,
-        scheduledDate: now.add(Duration(minutes: everyMinutes * i)),
+        scheduledDate: tz.TZDateTime.from(at[i], tz.local),
         notificationDetails: _details,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );

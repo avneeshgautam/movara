@@ -140,17 +140,20 @@ class ReminderScheduler extends ChangeNotifier {
   Future<void> addReminder({
     required String label,
     required int intervalMinutes,
+    int startMinute = Reminder.defaultStartMinute,
+    int endMinute = Reminder.defaultEndMinute,
   }) async {
     final trimmed = label.trim();
-    final reminder = Reminder(
+    final draft = Reminder(
       id: _newId(),
       notifId: _nextNotifId++,
       label: trimmed.isEmpty ? 'Reminder' : trimmed,
       intervalMinutes: _clampInterval(intervalMinutes),
       enabled: true,
-      nextDue: DateTime.now().add(Duration(minutes: _clampInterval(intervalMinutes))),
+      startMinute: _clampMinute(startMinute),
+      endMinute: _clampMinute(endMinute),
     );
-    _reminders = [..._reminders, reminder];
+    _reminders = [..._reminders, draft.copyWith(nextDue: _firstDue(draft))];
     await _afterChange(requestPermission: true);
   }
 
@@ -158,17 +161,23 @@ class ReminderScheduler extends ChangeNotifier {
     String id, {
     String? label,
     int? intervalMinutes,
+    int? startMinute,
+    int? endMinute,
   }) async {
     _reminders = _reminders.map((r) {
       if (r.id != id) return r;
-      final minutes =
-          intervalMinutes == null ? r.intervalMinutes : _clampInterval(intervalMinutes);
-      return r.copyWith(
+      final updated = r.copyWith(
         label: label?.trim().isEmpty ?? true ? r.label : label!.trim(),
-        intervalMinutes: minutes,
-        // Re-base so an interval change takes effect immediately.
-        nextDue: r.enabled ? DateTime.now().add(Duration(minutes: minutes)) : null,
+        intervalMinutes: intervalMinutes == null
+            ? r.intervalMinutes
+            : _clampInterval(intervalMinutes),
+        startMinute: startMinute == null ? null : _clampMinute(startMinute),
+        endMinute: endMinute == null ? null : _clampMinute(endMinute),
       );
+      // Re-base so an interval or hours change takes effect immediately.
+      return r.enabled
+          ? updated.copyWith(nextDue: _firstDue(updated))
+          : updated.copyWith(clearNextDue: true);
     }).toList();
     await _afterChange(requestPermission: false);
   }
@@ -178,13 +187,15 @@ class ReminderScheduler extends ChangeNotifier {
       if (r.id != id) return r;
       return r.copyWith(
         enabled: enabled,
-        nextDue:
-            enabled ? DateTime.now().add(Duration(minutes: r.intervalMinutes)) : null,
+        nextDue: enabled ? _firstDue(r) : null,
         clearNextDue: !enabled,
       );
     }).toList();
     await _afterChange(requestPermission: enabled);
   }
+
+  /// When [r] next fires from now, honouring its active hours.
+  DateTime _firstDue(Reminder r) => r.upcomingTimes(DateTime.now(), 1).first;
 
   Future<void> removeReminder(String id) async {
     _reminders = _reminders.where((r) => r.id != id).toList();
@@ -238,13 +249,14 @@ class ReminderScheduler extends ChangeNotifier {
     // iOS caps pending notifications, so share the budget across reminders.
     const budget = WaterNotifications.maxSeries;
     final per = (budget ~/ enabled.length).clamp(1, budget);
+    final now = DateTime.now();
     for (final r in enabled) {
       await _notifications.scheduleReminder(
         baseId: r.notifId,
         title: r.label,
         body: 'Reminder from Movara — ${r.label}.',
-        everyMinutes: r.intervalMinutes,
-        count: per,
+        // Only times inside the reminder's active hours are queued.
+        at: r.upcomingTimes(now, per),
       );
     }
   }
@@ -255,15 +267,16 @@ class ReminderScheduler extends ChangeNotifier {
     var changed = false;
     _reminders = _reminders.map((r) {
       if (!r.enabled || r.nextDue == null) return r;
-      if (DateTime.now().isBefore(r.nextDue!)) return r;
+      final now = DateTime.now();
+      if (now.isBefore(r.nextDue!)) return r;
 
-      if (!_notifications.schedulesInBackground) {
+      // A tab reopened after hours may find a stale due time; only notify
+      // when it is currently inside the reminder's active hours.
+      if (!_notifications.schedulesInBackground && r.isActiveAt(now)) {
         _notifications.show(r.label, 'Reminder from Movara — ${r.label}.');
       }
       changed = true;
-      return r.copyWith(
-        nextDue: DateTime.now().add(Duration(minutes: r.intervalMinutes)),
-      );
+      return r.copyWith(nextDue: r.upcomingTimes(now, 1).first);
     }).toList();
 
     if (changed) {
@@ -291,6 +304,8 @@ class ReminderScheduler extends ChangeNotifier {
 
   int _clampInterval(int minutes) =>
       minutes.clamp(minIntervalMinutes, maxIntervalMinutes).toInt();
+
+  int _clampMinute(int minute) => minute.clamp(0, 24 * 60 - 1).toInt();
 
   String _newId() =>
       '${DateTime.now().microsecondsSinceEpoch}_${_reminders.length}';

@@ -226,10 +226,16 @@ class RemindersTab extends StatelessWidget {
 
     if (existing == null) {
       await scheduler.addReminder(
-          label: result.label, intervalMinutes: result.minutes);
+          label: result.label,
+          intervalMinutes: result.minutes,
+          startMinute: result.startMinute,
+          endMinute: result.endMinute);
     } else {
       await scheduler.updateReminder(existing.id,
-          label: result.label, intervalMinutes: result.minutes);
+          label: result.label,
+          intervalMinutes: result.minutes,
+          startMinute: result.startMinute,
+          endMinute: result.endMinute);
     }
   }
 
@@ -357,7 +363,11 @@ class _ReminderCard extends StatelessWidget {
                           fontSize: 15,
                           fontWeight: FontWeight.w700)),
                   const SizedBox(height: 2),
-                  Text('Every ${formatInterval(reminder.intervalMinutes)}',
+                  Text(
+                      'Every ${formatInterval(reminder.intervalMinutes)} · '
+                      '${activeHoursLabel(context, reminder.startMinute, reminder.endMinute)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: c.textMuted, fontSize: 12)),
                 ],
               ),
@@ -376,10 +386,21 @@ class _ReminderCard extends StatelessWidget {
   }
 }
 
+/// "7:00 AM – 11:00 PM" in the device's 12/24h style, or "All day".
+String activeHoursLabel(BuildContext context, int startMinute, int endMinute) {
+  if (startMinute == endMinute) return 'All day';
+  final l = MaterialLocalizations.of(context);
+  String f(int m) =>
+      l.formatTimeOfDay(TimeOfDay(hour: m ~/ 60, minute: m % 60));
+  return '${f(startMinute)} – ${f(endMinute)}';
+}
+
 class _ReminderInput {
-  const _ReminderInput(this.label, this.minutes);
+  const _ReminderInput(this.label, this.minutes, this.startMinute, this.endMinute);
   final String label;
   final int minutes;
+  final int startMinute;
+  final int endMinute;
 }
 
 /// Add / edit sheet: a label and an interval (a preset or a typed value).
@@ -398,6 +419,9 @@ class _ReminderDialogState extends State<_ReminderDialog> {
   late final TextEditingController _custom = TextEditingController();
   late int _minutes =
       widget.existing?.intervalMinutes ?? ReminderScheduler.defaultIntervalMinutes;
+  late int _start = widget.existing?.startMinute ?? Reminder.defaultStartMinute;
+  late int _end = widget.existing?.endMinute ?? Reminder.defaultEndMinute;
+  late bool _allDay = widget.existing?.isAllDay ?? false;
 
   @override
   void dispose() {
@@ -411,7 +435,31 @@ class _ReminderDialogState extends State<_ReminderDialog> {
     final minutes = (typed ?? _minutes).clamp(
         ReminderScheduler.minIntervalMinutes,
         ReminderScheduler.maxIntervalMinutes);
-    Navigator.pop(context, _ReminderInput(_label.text, minutes));
+    // All day is stored as start == end.
+    Navigator.pop(
+      context,
+      _ReminderInput(_label.text, minutes, _allDay ? 0 : _start,
+          _allDay ? 0 : _end),
+    );
+  }
+
+  Future<void> _pickTime({required bool start}) async {
+    final current = start ? _start : _end;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: current ~/ 60, minute: current % 60),
+      helpText: start ? 'REMIND ME FROM' : 'REMIND ME UNTIL',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      final m = picked.hour * 60 + picked.minute;
+      if (start) {
+        _start = m;
+      } else {
+        _end = m;
+      }
+      _allDay = false;
+    });
   }
 
   @override
@@ -476,6 +524,45 @@ class _ReminderDialogState extends State<_ReminderDialog> {
                     borderSide: BorderSide(color: c.accent)),
               ),
             ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                // Expanded (not Spacer) so the label yields on narrow phones.
+                Expanded(
+                  child: Text('ACTIVE HOURS',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: c.textMuted,
+                          fontSize: 10,
+                          letterSpacing: 1.4)),
+                ),
+                const SizedBox(width: 8),
+                _chip(context, 'All day', _allDay,
+                    () => setState(() => _allDay = !_allDay)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Opacity(
+              opacity: _allDay ? 0.4 : 1,
+              child: Row(
+                children: [
+                  Expanded(child: _timeBox(context, 'From', _start, true)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text('–', style: TextStyle(color: c.textMuted)),
+                  ),
+                  Expanded(child: _timeBox(context, 'To', _end, false)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _allDay
+                  ? 'Reminders can arrive at any hour.'
+                  : 'No reminders outside these hours.',
+              style: TextStyle(color: c.textMuted, fontSize: 11),
+            ),
           ],
         ),
       ),
@@ -490,6 +577,41 @@ class _ReminderDialogState extends State<_ReminderDialog> {
           child: Text(isEdit ? 'Save' : 'Add'),
         ),
       ],
+    );
+  }
+
+  Widget _timeBox(BuildContext context, String caption, int minute, bool start) {
+    final c = context.movara;
+    final time = MaterialLocalizations.of(context)
+        .formatTimeOfDay(TimeOfDay(hour: minute ~/ 60, minute: minute % 60));
+    return GestureDetector(
+      key: ValueKey('hours-$caption'),
+      onTap: () => _pickTime(start: start),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: c.surface2,
+          border: Border.all(color: c.border),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(caption,
+                style: TextStyle(color: c.textMuted, fontSize: 10)),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(time,
+                  style: AppTheme.display(
+                      color: c.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

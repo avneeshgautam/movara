@@ -6,10 +6,13 @@ import 'package:movara_app/services/water_notifications.dart';
 
 /// Stands in for the platform, recording what it was asked to do.
 class _FakeNotifications implements WaterNotifications {
-  _FakeNotifications({this.supported = true, this.grants = true});
+  _FakeNotifications(
+      {this.supported = true, this.grants = true, this.background = false});
 
   final bool supported;
   final bool grants;
+  final bool background; // true behaves like iOS (OS-held schedule)
+  final List<DateTime> scheduledTimes = [];
 
   String _permission = 'default';
   final List<String> shown = [];
@@ -21,7 +24,7 @@ class _FakeNotifications implements WaterNotifications {
   bool get isSupported => supported;
 
   @override
-  bool get schedulesInBackground => false;
+  bool get schedulesInBackground => background;
 
   @override
   String get permission => _permission;
@@ -41,10 +44,11 @@ class _FakeNotifications implements WaterNotifications {
     required int baseId,
     required String title,
     required String body,
-    required int everyMinutes,
-    required int count,
-  }) async =>
-      scheduledBaseIds.add(baseId);
+    required List<DateTime> at,
+  }) async {
+    scheduledBaseIds.add(baseId);
+    scheduledTimes.addAll(at);
+  }
 
   @override
   Future<void> cancelAll() async => cancelAllCount++;
@@ -296,6 +300,42 @@ void main() {
       await s.load();
       expect(s.reminders, hasLength(1));
       expect(s.reminders.single.intervalMinutes, 30);
+      s.dispose();
+    });
+  });
+  group('active hours', () {
+    test('only times inside the window are scheduled with the OS', () async {
+      final fake = _FakeNotifications(background: true);
+      final s = ReminderScheduler(notifications: fake, seedDefaults: false);
+      await s.load();
+      await s.addReminder(
+          label: 'Stretch',
+          intervalMinutes: 30,
+          startMinute: 9 * 60,
+          endMinute: 17 * 60);
+
+      expect(fake.scheduledTimes, isNotEmpty);
+      for (final t in fake.scheduledTimes) {
+        final m = t.hour * 60 + t.minute;
+        expect(m >= 9 * 60 && m <= 17 * 60, isTrue, reason: '$t is outside');
+      }
+      final r = s.reminders.single;
+      expect(r.isActiveAt(r.nextDue!), isTrue);
+      s.dispose();
+    });
+
+    test('editing the hours reschedules within the new window', () async {
+      final fake = _FakeNotifications(background: true);
+      final s = ReminderScheduler(notifications: fake, seedDefaults: false);
+      await s.load();
+      await s.addReminder(label: 'Water', intervalMinutes: 45);
+      fake.scheduledTimes.clear();
+
+      await s.updateReminder(s.reminders.single.id,
+          startMinute: 20 * 60, endMinute: 22 * 60);
+      expect(fake.scheduledTimes, isNotEmpty);
+      expect(
+          fake.scheduledTimes.every((t) => t.hour >= 20 && t.hour <= 22), isTrue);
       s.dispose();
     });
   });
