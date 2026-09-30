@@ -21,6 +21,7 @@ def require_database():
         pytest.skip("no PostgreSQL reachable")
     with db.SessionLocal() as session:
         session.execute(delete(db.WorkoutEntry))
+        session.execute(delete(db.ProfilePhoto))
         session.execute(delete(db.Profile))
         session.execute(delete(db.Run))
         session.commit()
@@ -174,3 +175,73 @@ class TestUsernamePrivacy:
             headers=headers_for(local_signing_key, "bob"),
         )
         assert again.status_code == 204
+
+
+# Smallest valid-looking images: only the magic bytes are checked.
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+
+def upload_photo(key, uid, data, content_type="image/jpeg"):
+    return client.put(
+        "/api/profile/photo",
+        content=data,
+        headers={**headers_for(key, uid), "Content-Type": content_type},
+    )
+
+
+class TestProfilePhoto:
+    def test_upload_serves_the_photo_and_sets_the_profile_url(self, local_signing_key):
+        set_profile(local_signing_key, "alice", "Alice")
+        r = upload_photo(local_signing_key, "alice", JPEG)
+        assert r.status_code == 200
+        url = r.json()["photoUrl"]
+        assert "/api/profile/photo/alice?v=" in url
+
+        # Public: fetched without an auth header, like an image widget does.
+        img = client.get("/api/profile/photo/alice")
+        assert img.status_code == 200
+        assert img.content == JPEG
+        assert img.headers["content-type"] == "image/jpeg"
+
+        me = client.get("/api/profile/me", headers=headers_for(local_signing_key, "alice"))
+        assert me.json()["photoUrl"] == url
+        assert me.json()["photoCustom"] is True
+
+    def test_uploaded_photo_survives_the_sign_in_upsert(self, local_signing_key):
+        upload_photo(local_signing_key, "alice", PNG)
+        # The client sends its Google photo on every launch.
+        client.put(
+            "/api/profile",
+            json={"displayName": "Alice", "photoUrl": "https://google/photo.jpg"},
+            headers=headers_for(local_signing_key, "alice"),
+        )
+        board = client.get(
+            "/api/leaderboard", headers=headers_for(local_signing_key, "alice")
+        ).json()
+        assert "/api/profile/photo/alice" in board[0]["photoUrl"]
+
+    def test_remove_restores_the_sign_in_photo(self, local_signing_key):
+        upload_photo(local_signing_key, "alice", JPEG)
+        r = client.delete("/api/profile/photo", headers=headers_for(local_signing_key, "alice"))
+        assert r.status_code == 204
+        assert client.get("/api/profile/photo/alice").status_code == 404
+
+        client.put(
+            "/api/profile",
+            json={"displayName": "Alice", "photoUrl": "https://google/photo.jpg"},
+            headers=headers_for(local_signing_key, "alice"),
+        )
+        me = client.get("/api/profile/me", headers=headers_for(local_signing_key, "alice"))
+        assert me.json()["photoUrl"] == "https://google/photo.jpg"
+        assert me.json()["photoCustom"] is False
+
+    def test_rejects_non_images_and_oversized_uploads(self, local_signing_key):
+        assert upload_photo(local_signing_key, "alice", b"<svg>x</svg>").status_code == 415
+        assert upload_photo(local_signing_key, "alice", b"").status_code == 400
+        big = JPEG + b"\x00" * 2_100_000
+        assert upload_photo(local_signing_key, "alice", big).status_code == 413
+
+    def test_upload_requires_sign_in(self):
+        r = client.put("/api/profile/photo", content=JPEG)
+        assert r.status_code == 401

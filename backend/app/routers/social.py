@@ -5,15 +5,16 @@ sets logged this week. Friends-scoping comes later. Only names, photos and a
 weekly count are exposed -- never another user's individual entries.
 """
 
-from datetime import date, datetime, timedelta
+import time
+from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import db
 from ..auth import current_uid
-from ..models import LeaderboardEntry, MyProfile, ProfileRequest
+from ..models import LeaderboardEntry, MyProfile, PhotoResponse, ProfileRequest
 
 # Points: reward a set and a kilometre. Tuned so a typical workout and a short
 # run land in a similar range.
@@ -39,7 +40,9 @@ def upsert_profile(
         profile = db.Profile(user_id=uid)
         session.add(profile)
     profile.display_name = body.displayName.strip()[:120]
-    profile.photo_url = body.photoUrl
+    # Clients send their Google photo on every sign-in; an uploaded photo wins.
+    if not profile.photo_custom:
+        profile.photo_url = body.photoUrl
     if body.username is not None:
         wanted = body.username[:40].strip() or None
         if wanted is not None:
@@ -83,7 +86,106 @@ def my_profile(
     profile = session.get(db.Profile, uid)
     if profile is None:
         return MyProfile(displayName="", username=None)
-    return MyProfile(displayName=profile.display_name, username=profile.username)
+    return MyProfile(
+        displayName=profile.display_name,
+        username=profile.username,
+        photoUrl=profile.photo_url,
+        photoCustom=profile.photo_custom,
+    )
+
+
+# The client resizes to ~512px JPEG before upload (~50-150 KB); this is a
+# generous ceiling that still keeps rows small.
+_MAX_PHOTO_BYTES = 2_000_000
+_IMAGE_SIGNATURES = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG\r\n\x1a\n": "image/png",
+}
+
+
+def _sniff_image(data: bytes) -> str | None:
+    """Content type from the file's magic bytes, never the client's claim."""
+    for signature, content_type in _IMAGE_SIGNATURES.items():
+        if data.startswith(signature):
+            return content_type
+    return None
+
+
+def _public_base(request: Request) -> str:
+    """This API's public origin. Behind Render's proxy the request itself is
+    plain http, so honour the forwarded scheme/host."""
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    return f"{scheme}://{host}"
+
+
+@router.put("/api/profile/photo", response_model=PhotoResponse)
+async def upload_photo(
+    request: Request,
+    uid: str = Depends(current_uid),
+    session: Session = Depends(db.get_session),
+) -> PhotoResponse:
+    """Store the caller's photo (raw JPEG/PNG body) and point their profile
+    at it. The URL carries a version so image caches pick up a new photo."""
+    data = await request.body()
+    if not data:
+        raise HTTPException(status_code=400, detail="No image uploaded.")
+    if len(data) > _MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=413, detail="Photo is too large (max 2 MB).")
+    content_type = _sniff_image(data)
+    if content_type is None:
+        raise HTTPException(status_code=415, detail="Upload a JPEG or PNG image.")
+
+    photo = session.get(db.ProfilePhoto, uid)
+    if photo is None:
+        photo = db.ProfilePhoto(user_id=uid)
+        session.add(photo)
+    photo.data = data
+    photo.content_type = content_type
+    photo.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    profile = session.get(db.Profile, uid)
+    if profile is None:
+        # The name arrives with the client's next profile upsert.
+        profile = db.Profile(user_id=uid, display_name="Athlete")
+        session.add(profile)
+    profile.photo_url = (
+        f"{_public_base(request)}/api/profile/photo/{uid}?v={int(time.time())}"
+    )
+    profile.photo_custom = True
+    session.commit()
+    return PhotoResponse(photoUrl=profile.photo_url)
+
+
+@router.delete("/api/profile/photo", status_code=204)
+def remove_photo(
+    uid: str = Depends(current_uid),
+    session: Session = Depends(db.get_session),
+) -> None:
+    """Drop the uploaded photo; the client's next upsert restores Google's."""
+    photo = session.get(db.ProfilePhoto, uid)
+    if photo is not None:
+        session.delete(photo)
+    profile = session.get(db.Profile, uid)
+    if profile is not None and profile.photo_custom:
+        profile.photo_custom = False
+        profile.photo_url = None
+    session.commit()
+
+
+@router.get("/api/profile/photo/{user_id}")
+def get_photo(user_id: str, session: Session = Depends(db.get_session)) -> Response:
+    """Public: leaderboard/feed images load without an auth header. Only the
+    photo a user chose to upload is served here."""
+    photo = session.get(db.ProfilePhoto, user_id)
+    if photo is None:
+        raise HTTPException(status_code=404, detail="No photo.")
+    return Response(
+        content=photo.data,
+        media_type=photo.content_type,
+        # URLs are versioned (?v=), so a new upload is a new URL.
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 
 def _public_name(profile: "db.Profile", uid: str) -> str:

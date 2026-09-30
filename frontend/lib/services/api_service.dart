@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -138,8 +139,15 @@ class ApiService {
     }
   }
 
-  /// The signed-in user's own profile (real name + chosen public username).
-  Future<({String displayName, String? username})> fetchMyProfile() async {
+  /// The signed-in user's own profile: real name, chosen public username, and
+  /// the photo others see ([photoCustom] when it's one they uploaded).
+  Future<
+      ({
+        String displayName,
+        String? username,
+        String? photoUrl,
+        bool photoCustom,
+      })> fetchMyProfile() async {
     final response =
         await _client.get(_uri('/profile/me'), headers: await _headers());
     _checkOk(response);
@@ -147,7 +155,33 @@ class ApiService {
     return (
       displayName: (data['displayName'] as String?) ?? '',
       username: data['username'] as String?,
+      photoUrl: data['photoUrl'] as String?,
+      photoCustom: data['photoCustom'] as bool? ?? false,
     );
+  }
+
+  /// Uploads a new profile photo (JPEG/PNG bytes, already resized) and
+  /// returns the public URL now shown on the leaderboard and feed.
+  Future<String> uploadProfilePhoto(Uint8List bytes) async {
+    return _resilient(() async {
+      final headers = await _headers()
+        ..['Content-Type'] = 'image/jpeg';
+      final response = await _client.put(
+        _uri('/profile/photo'),
+        headers: headers,
+        body: bytes,
+      );
+      _checkOk(response);
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return data['photoUrl'] as String;
+    });
+  }
+
+  /// Removes the uploaded photo; the profile falls back to the sign-in photo.
+  Future<void> removeProfilePhoto() async {
+    final response =
+        await _client.delete(_uri('/profile/photo'), headers: await _headers());
+    _checkOk(response, expected: 204);
   }
 
   /// Syncs one recorded run to the backend so it scores on the leaderboard.

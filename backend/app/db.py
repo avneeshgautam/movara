@@ -10,15 +10,18 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Float,
     Index,
     Integer,
+    LargeBinary,
     String,
     create_engine,
     func,
     select,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -129,6 +132,27 @@ class Profile(Base):
     # Public handle chosen by the user; shown to others instead of the real
     # name. Null until they set one.
     username: Mapped[str | None] = mapped_column(String(40))
+    # True once the user uploads their own photo: the Google photo the client
+    # sends on every sign-in must then no longer overwrite photo_url.
+    photo_custom: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
+
+class ProfilePhoto(Base):
+    """A user-uploaded profile photo (small, client-resized JPEG/PNG).
+
+    Kept out of `profiles` so leaderboard queries never load image bytes.
+    Served publicly at /api/profile/photo/{user_id} because image widgets
+    fetch it without an auth header.
+    """
+
+    __tablename__ = "profile_photos"
+
+    user_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 SEED_EXERCISES = [
@@ -155,6 +179,12 @@ def _migrate(session: Session) -> None:
 
     session.execute(
         text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username VARCHAR(40)")
+    )
+    session.execute(
+        text(
+            "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS "
+            "photo_custom BOOLEAN NOT NULL DEFAULT FALSE"
+        )
     )
     session.commit()
 

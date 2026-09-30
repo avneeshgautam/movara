@@ -95,6 +95,13 @@ class ProfileRequest(BaseModel):
 class MyProfile(BaseModel):
     displayName: str
     username: str | None = None
+    photoUrl: str | None = None
+    # True when photoUrl is a photo the user uploaded (vs. their Google one).
+    photoCustom: bool = False
+
+
+class PhotoResponse(BaseModel):
+    photoUrl: str
 
 
 class RunUpload(BaseModel):

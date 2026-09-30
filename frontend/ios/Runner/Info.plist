@@ -38,9 +38,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Movara uses the camera so you can put a photo behind your run overlay.</string>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
+	<string>Movara uses the camera to take your profile photo or a photo for your run overlay.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Movara reads your heart rate and steps from Apple Health so your activities show real watch data.</string>
 	<key>NSHealthUpdateUsageDescription</key>
@@ -52,7 +50,9 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Movara saves your run cards to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Movara lets you place a photo behind your run overlay.</string>
+	<string>Movara lets you choose a profile photo and place a photo behind your run overlay.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

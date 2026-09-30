@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -65,6 +67,12 @@ class _AccountTabState extends State<AccountTab> {
   /// Gym motivation times, minutes after midnight.
   int _morningMin = MotivationReminders.defaultMorningMinute;
   int _eveningMin = MotivationReminders.defaultEveningMinute;
+
+  /// The photo others see: an uploaded one ([_photoCustom]) or the sign-in
+  /// photo. Starts as the sign-in photo until the server profile loads.
+  late String? _photoUrl = widget.photoUrl;
+  bool _photoCustom = false;
+  bool _photoBusy = false;
 
   @override
   void initState() {
@@ -211,12 +219,132 @@ class _AccountTabState extends State<AccountTab> {
     try {
       final me = await widget.api.fetchMyProfile();
       if (!mounted) return;
-      // Only prefill if the user hasn't already started typing.
-      if (_usernameController.text.isEmpty) {
-        setState(() => _usernameController.text = me.username ?? '');
-      }
+      setState(() {
+        // Only prefill if the user hasn't already started typing.
+        if (_usernameController.text.isEmpty) {
+          _usernameController.text = me.username ?? '';
+        }
+        if (me.photoCustom && me.photoUrl != null) {
+          _photoUrl = me.photoUrl;
+          _photoCustom = true;
+        }
+      });
     } catch (_) {
       // Prefill is best-effort; the field is editable regardless.
+    }
+  }
+
+  /// The first letter of the name, shown when there's no photo.
+  Widget _initial(MovaraColors c) => Text(
+        _name.isEmpty ? '?' : _name[0].toUpperCase(),
+        style: AppTheme.display(
+          color: c.accent,
+          fontSize: 30,
+          fontWeight: FontWeight.w800,
+        ),
+      );
+
+  /// Pick, take, or remove the profile photo shown on the leaderboard/feed.
+  Future<void> _changePhoto(BuildContext context) async {
+    if (_photoBusy) return;
+    final c = context.movara;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: c.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Icon(Icons.photo_library_outlined, color: c.accent),
+              title: Text('Choose from photos',
+                  style: TextStyle(color: c.textPrimary)),
+              onTap: () => Navigator.pop(sheet, 'gallery'),
+            ),
+            if (!kIsWeb)
+              ListTile(
+                leading: Icon(Icons.photo_camera_outlined, color: c.accent),
+                title: Text('Take a photo',
+                    style: TextStyle(color: c.textPrimary)),
+                onTap: () => Navigator.pop(sheet, 'camera'),
+              ),
+            if (_photoCustom)
+              ListTile(
+                leading: const Icon(Icons.delete_outline,
+                    color: Color(0xFFEF4444)),
+                title: const Text('Remove photo',
+                    style: TextStyle(color: Color(0xFFEF4444))),
+                subtitle: Text('Go back to your Google photo',
+                    style: TextStyle(color: c.textMuted, fontSize: 12)),
+                onTap: () => Navigator.pop(sheet, 'remove'),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(this.context);
+
+    if (action == 'remove') {
+      setState(() => _photoBusy = true);
+      try {
+        await widget.api.removeProfilePhoto();
+        // Put the sign-in photo back straight away rather than next launch.
+        await widget.api.upsertProfile(_name, photoUrl: widget.photoUrl);
+        if (mounted) {
+          setState(() {
+            _photoUrl = widget.photoUrl;
+            _photoCustom = false;
+          });
+        }
+        messenger.showSnackBar(
+            const SnackBar(content: Text('Photo removed.')));
+      } catch (_) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text("Couldn't remove the photo. Try again.")));
+      } finally {
+        if (mounted) setState(() => _photoBusy = false);
+      }
+      return;
+    }
+
+    final XFile? picked;
+    try {
+      // Resized and re-encoded on device: small upload, and HEIC becomes JPEG.
+      picked = await ImagePicker().pickImage(
+        source: action == 'camera' ? ImageSource.camera : ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Allow photo access in Settings to choose a photo.')));
+      return;
+    }
+    if (picked == null || !mounted) return;
+
+    setState(() => _photoBusy = true);
+    try {
+      final url =
+          await widget.api.uploadProfilePhoto(await picked.readAsBytes());
+      if (mounted) {
+        setState(() {
+          _photoUrl = url;
+          _photoCustom = true;
+        });
+      }
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Profile photo updated. 📸')));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text("Couldn't upload the photo. Try again.")));
+    } finally {
+      if (mounted) setState(() => _photoBusy = false);
     }
   }
 
@@ -417,50 +545,72 @@ class _AccountTabState extends State<AccountTab> {
         children: [
           Row(
             children: [
-              SizedBox(
-                width: 76,
-                height: 76,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      width: 76,
-                      height: 76,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: c.accentSoft,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: c.accent, width: 3),
-                        boxShadow: [
-                          BoxShadow(color: c.accentGlow, blurRadius: 20),
-                        ],
+              GestureDetector(
+                key: const ValueKey('profile-photo'),
+                onTap: () => _changePhoto(context),
+                child: SizedBox(
+                  width: 76,
+                  height: 76,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 76,
+                        height: 76,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: c.accentSoft,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: c.accent, width: 3),
+                          boxShadow: [
+                            BoxShadow(color: c.accentGlow, blurRadius: 20),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: _photoUrl != null
+                            ? Image.network(
+                                _photoUrl!,
+                                width: 76,
+                                height: 76,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => _initial(c),
+                              )
+                            : _initial(c),
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      child: widget.photoUrl != null
-                          ? Image.network(
-                              widget.photoUrl!,
-                              width: 76,
-                              height: 76,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Text(
-                                _name.isEmpty ? '?' : _name[0].toUpperCase(),
-                                style: AppTheme.display(
-                                  color: c.accent,
-                                  fontSize: 30,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            )
-                          : Text(
-                              _name.isEmpty ? '?' : _name[0].toUpperCase(),
-                              style: AppTheme.display(
-                                color: c.accent,
-                                fontSize: 30,
-                                fontWeight: FontWeight.w800,
-                              ),
+                      if (_photoBusy)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.black45,
+                              shape: BoxShape.circle,
                             ),
-                    ),
-                  ],
+                            alignment: Alignment.center,
+                            child: const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2.5, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      // Camera badge: signals the photo can be changed.
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: Container(
+                          width: 26,
+                          height: 26,
+                          decoration: BoxDecoration(
+                            color: c.accent,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: c.surface, width: 2),
+                          ),
+                          child: const Icon(Icons.photo_camera,
+                              size: 13, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
