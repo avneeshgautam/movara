@@ -62,22 +62,28 @@ void openHabitDetail(BuildContext context, HabitStore store, Habit habit) {
 /// All habits: today's check-ins, the week at a glance, reordering,
 /// templates and archive.
 class HabitsScreen extends StatelessWidget {
-  const HabitsScreen({super.key, required this.store});
+  const HabitsScreen({super.key, required this.store, this.embedded = false});
 
   final HabitStore store;
+
+  /// True when shown as a bottom tab: the shell already draws the Movara
+  /// header, so this screen drops its own app bar.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     final c = context.movara;
     return Scaffold(
       backgroundColor: c.bg,
-      appBar: AppBar(
-        backgroundColor: c.bg,
-        surfaceTintColor: Colors.transparent,
-        iconTheme: IconThemeData(color: c.textPrimary),
-        title: Text('Habits',
-            style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
-      ),
+      appBar: embedded
+          ? null
+          : AppBar(
+              backgroundColor: c.bg,
+              surfaceTintColor: Colors.transparent,
+              iconTheme: IconThemeData(color: c.textPrimary),
+              title: Text('Habits',
+                  style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+            ),
       floatingActionButton: FloatingActionButton.extended(
         key: const ValueKey('habit-new'),
         backgroundColor: c.accent,

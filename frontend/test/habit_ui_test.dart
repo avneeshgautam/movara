@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:movara_app/models/habit.dart';
 import 'package:movara_app/models/workout_entry.dart';
 import 'package:movara_app/screens/habits_screen.dart';
+import 'package:movara_app/screens/home_shell.dart';
 import 'package:movara_app/screens/home_tab.dart';
 import 'package:movara_app/services/goal_store.dart';
 import 'package:movara_app/services/habit_store.dart';
@@ -141,5 +142,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.byId(h.id)!.doneOn(yesterday), isTrue);
     expect(find.text('🔥 1d'), findsOneWidget);
+  });
+
+  testWidgets('all seven bottom tabs fit a narrow phone', (tester) async {
+    tester.view.physicalSize = const Size(320, 700); // smallest common phone
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    MovaraTab? tapped;
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: Scaffold(
+        bottomNavigationBar: MovaraTabBar(
+          current: MovaraTab.home,
+          onChanged: (t) => tapped = t,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    for (final t in MovaraTab.values) {
+      expect(find.text(t.label), findsOneWidget, reason: '${t.label} missing');
+    }
+    expect(tester.takeException(), isNull); // no overflow at 320px
+
+    await tester.tap(find.text('Habits'));
+    expect(tapped, MovaraTab.habits);
   });
 }

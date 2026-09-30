@@ -17,7 +17,7 @@ import '../services/workout_log.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 import '../widgets/badges_grid.dart';
-import 'habits_screen.dart';
+import 'home_shell.dart';
 
 /// Profile / account screen.
 ///
@@ -61,8 +61,8 @@ class AccountTab extends StatefulWidget {
   /// The user's habits, for the Habits row.
   final HabitStore? habitStore;
 
-  /// Switches the shell to another bottom tab (0=Home,1=Workout,3=Reminders).
-  final void Function(int index)? onOpenTab;
+  /// Switches the shell to another bottom tab.
+  final void Function(MovaraTab tab)? onOpenTab;
 
   @override
   State<AccountTab> createState() => _AccountTabState();
@@ -1044,14 +1044,13 @@ class _AccountTabState extends State<AccountTab> {
       (
         title: 'Preferences',
         items: [
-          _MenuAction('🎯', 'Edit Goals', onTap: () => widget.onOpenTab?.call(0)),
-          if (widget.habitStore != null)
+          _MenuAction('🎯', 'Edit Goals', onTap: () => widget.onOpenTab?.call(MovaraTab.home)),
+          if (widget.onOpenTab != null)
             _MenuAction('🌱', 'Habits',
                 subtitle: 'Track habits, streaks and reminders',
-                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => HabitsScreen(store: widget.habitStore!)))),
+                onTap: () => widget.onOpenTab!(MovaraTab.habits)),
           _MenuAction('📊', 'Progress History',
-              onTap: () => widget.onOpenTab?.call(1)),
+              onTap: () => widget.onOpenTab?.call(MovaraTab.workout)),
           _MenuAction('🔔', 'Notifications', toggleKey: 'Notifications'),
           _MenuAction('📏', 'Units (Metric)',
               onTap: () => _comingSoon(context, 'Imperial units')),
@@ -1081,7 +1080,7 @@ class _AccountTabState extends State<AccountTab> {
               subtitle: 'Subscription · coming soon',
               onTap: widget.onOpenUpgrade),
           _MenuAction('💧', 'Water Reminders',
-              onTap: () => widget.onOpenTab?.call(3)),
+              onTap: () => widget.onOpenTab?.call(MovaraTab.reminders)),
           _MenuAction('🔒', 'Privacy', onTap: () => _showPrivacy(context)),
           _MenuAction('⬇️', 'Download App',
               onTap: () => _showDownloadApp(context)),
