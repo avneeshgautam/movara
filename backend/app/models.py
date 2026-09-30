@@ -131,3 +131,10 @@ class LeaderboardEntry(BaseModel):
     kmThisWeek: float
     rank: int
     isMe: bool
+
+
+class NotificationResponse(BaseModel):
+    id: str
+    title: str
+    body: str
+    createdAt: datetime

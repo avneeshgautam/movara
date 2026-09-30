@@ -139,6 +139,28 @@ class Profile(Base):
     photo_custom: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    # First and latest sign-in, for the local admin dashboard's growth and
+    # activity figures. Null on profiles created before these existed.
+    created_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class Notification(Base):
+    """A message from the admin to one user (user_id) or everyone (null).
+
+    The app fetches new ones on launch/resume and shows them as a
+    notification plus an in-app card.
+    """
+
+    __tablename__ = "notifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    user_id: Mapped[str | None] = mapped_column(String(128))
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    body: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    __table_args__ = (Index("ix_notifications_created", "created_at"),)
 
 
 class ProfilePhoto(Base):
@@ -190,6 +212,12 @@ def _migrate(session: Session) -> None:
     )
     session.execute(
         text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS status VARCHAR(100)")
+    )
+    session.execute(
+        text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMP")
+    )
+    session.execute(
+        text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP")
     )
     session.commit()
 

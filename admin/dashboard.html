@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Movara Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f4f0; --surface: #ffffff; --surface2: #efeee9; --border: #e2e0d8;
+    --text: #1a1a1f; --muted: #7a7a85; --accent: #e07a2e; --accent-soft: #fbeadb;
+    --green: #2f9e6a; --red: #d9453b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 18px 28px;
+           background: var(--surface); border-bottom: 1px solid var(--border); }
+  .brand { font-weight: 900; letter-spacing: .18em; color: var(--accent); font-size: 18px; }
+  .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--border);
+         padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  nav { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  nav button { white-space: nowrap; }
+  nav button { border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+               padding: 8px 16px; border-radius: 999px; cursor: pointer; font-weight: 600; }
+  nav button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  main { max-width: 1200px; margin: 0 auto; padding: 24px 28px 60px; }
+  section { display: none; } section.on { display: block; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+  .card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  .card .value { font-size: 28px; font-weight: 800; margin-top: 4px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+           padding: 18px; margin-top: 16px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  tr.user:hover { background: var(--surface2); cursor: pointer; }
+  .who { display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft);
+            color: var(--accent); display: grid; place-items: center; font-weight: 800;
+            overflow: hidden; flex: none; }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .status { font-style: italic; color: var(--muted); font-size: 12px; }
+  input, textarea, select { width: 100%; padding: 10px 12px; border: 1px solid var(--border);
+            border-radius: 10px; font: inherit; background: var(--surface); color: var(--text); }
+  textarea { min-height: 90px; resize: vertical; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 6px; }
+  .btn { background: var(--accent); color: #fff; border: 0; padding: 11px 20px;
+         border-radius: 12px; font-weight: 700; cursor: pointer; margin-top: 14px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .note { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .note:last-child { border: 0; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+           background: var(--text); color: #fff; padding: 10px 18px; border-radius: 10px;
+           opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.on { opacity: 1; }
+  .drawer { position: fixed; top: 0; right: 0; width: min(520px, 100%); height: 100%;
+            background: var(--surface); border-left: 1px solid var(--border);
+            box-shadow: -10px 0 30px rgba(0,0,0,.08); padding: 22px; overflow: auto;
+            transform: translateX(100%); transition: transform .2s; }
+  .drawer.on { transform: none; }
+  .x { float: right; border: 0; background: var(--surface2); border-radius: 999px;
+       width: 32px; height: 32px; cursor: pointer; font-size: 16px; }
+  .banner { background: var(--accent-soft); border: 1px solid #f1c9a6; border-radius: 12px;
+            padding: 10px 14px; margin-bottom: 16px; font-size: 13px; }
+  .muted { color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  @media (max-width: 760px) {
+    header, main { padding-left: 16px; padding-right: 16px; }
+    .row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">MOVARA</div>
+  <span class="tag">Admin · local only</span>
+  <nav>
+    <button data-tab="overview" class="on">Overview</button>
+    <button data-tab="users">Users</button>
+    <button data-tab="notify">Notifications</button>
+  </nav>
+</header>
+
+<main>
+  <section id="overview" class="on">
+    <div id="fbBanner" class="banner" hidden>
+      Emails and sign-up times aren't shown yet — add a Firebase service-account key
+      (see <code>admin/README.md</code>). Everything else works without it.
+    </div>
+    <div class="cards" id="cards"></div>
+    <div class="panel">
+      <h2>User growth — last 60 days</h2>
+      <canvas id="growth" height="110"></canvas>
+    </div>
+  </section>
+
+  <section id="users">
+    <div class="panel">
+      <input id="search" placeholder="Search by name, username, email or status…">
+      <div class="scroll"><table>
+        <thead><tr>
+          <th>User</th><th>Email</th><th>First seen</th><th>Last active</th>
+          <th>Sets (wk / all)</th><th>Runs · km</th>
+        </tr></thead>
+        <tbody id="userRows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="notify">
+    <div class="row">
+      <div class="panel">
+        <h2>Send a notification</h2>
+        <label for="target">To</label>
+        <select id="target"><option value="">📣 Everyone</option></select>
+        <label for="title">Title</label>
+        <input id="title" maxlength="120" placeholder="e.g. New feature: Edit profile ✨">
+        <label for="body">Message</label>
+        <textarea id="body" maxlength="500" placeholder="What do you want to tell them?"></textarea>
+        <button class="btn" id="send">Send</button>
+        <p class="sub">Delivered the next time the app is opened (iPhone, Android and web).</p>
+      </div>
+      <div class="panel">
+        <h2>Sent</h2>
+        <div id="sent"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<aside class="drawer" id="drawer"></aside>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const when = (iso) => iso ? new Date(iso + (iso.endsWith('Z') ? '' : 'Z')).toLocaleString() : '—';
+const ago = (iso) => {
+  if (!iso) return '—';
+  const s = (Date.now() - new Date(iso + (iso.endsWith('Z') ? '' : 'Z'))) / 1000;
+  if (s < 3600) return Math.max(1, Math.round(s / 60)) + ' min ago';
+  if (s < 86400) return Math.round(s / 3600) + ' h ago';
+  return Math.round(s / 86400) + ' d ago';
+};
+const toast = (msg) => { const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  setTimeout(() => t.classList.remove('on'), 2500); };
+const get = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error(await r.text()); return r.json(); };
+const avatar = (u) => `<div class="avatar">${u.photoUrl
+  ? `<img src="${esc(u.photoUrl)}" alt="" onerror="this.remove()">` : ''}${esc((u.name || '?')[0].toUpperCase())}</div>`;
+
+let USERS = [];
+let chart;
+
+document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('on', x === b));
+  document.querySelectorAll('section').forEach((s) => s.classList.toggle('on', s.id === b.dataset.tab));
+});
+
+async function loadOverview() {
+  const o = await get('/api/overview');
+  $('#fbBanner').hidden = o.firebaseLinked;
+  const cards = [
+    ['Total users', o.users], ['New this week', o.newThisWeek],
+    ['Active today', o.activeToday], ['Active (7 days)', o.active7d],
+    ['Sets logged', o.setsTotal], ['Runs', o.runsTotal], ['Km run', o.kmTotal],
+    ['Notifications sent', o.notificationsSent],
+  ];
+  $('#cards').innerHTML = cards.map(([l, v]) =>
+    `<div class="card"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
+  const labels = o.growth.map((d) => d.date.slice(5));
+  chart?.destroy();
+  chart = new Chart($('#growth'), {
+    data: { labels, datasets: [
+      { type: 'line', label: 'Total users', data: o.growth.map((d) => d.total),
+        borderColor: '#e07a2e', backgroundColor: 'rgba(224,122,46,.12)', fill: true,
+        tension: .3, yAxisID: 'y' },
+      { type: 'bar', label: 'New that day', data: o.growth.map((d) => d.new),
+        backgroundColor: 'rgba(47,158,106,.55)', yAxisID: 'y1' },
+    ]},
+    options: { interaction: { mode: 'index', intersect: false },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } },
+                y1: { beginAtZero: true, position: 'right', grid: { display: false },
+                      ticks: { precision: 0 } } } },
+  });
+}
+
+function renderUsers() {
+  const q = $('#search').value.trim().toLowerCase();
+  const rows = USERS.filter((u) => !q || [u.name, u.username, u.email, u.status, u.signInName]
+    .some((v) => (v || '').toLowerCase().includes(q)));
+  $('#userRows').innerHTML = rows.map((u) => `
+    <tr class="user" data-id="${esc(u.userId)}">
+      <td><div class="who">${avatar(u)}<div><b>${esc(u.name)}</b>
+        ${u.status ? `<div class="status">${esc(u.status)}</div>` : ''}</div></div></td>
+      <td class="sub">${esc(u.email || '—')}</td>
+      <td class="sub">${when(u.firstSeen)}</td>
+      <td class="sub">${ago(u.lastActive)}</td>
+      <td>${u.setsThisWeek} / ${u.setsTotal}</td>
+      <td>${u.runs} · ${u.km} km</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="muted">No users match.</td></tr>';
+  document.querySelectorAll('tr.user').forEach((tr) => tr.onclick = () => openUser(tr.dataset.id));
+}
+
+async function loadUsers() {
+  USERS = await get('/api/users');
+  renderUsers();
+  $('#target').innerHTML = '<option value="">📣 Everyone</option>' + USERS.map((u) =>
+    `<option value="${esc(u.userId)}">${esc(u.name)}${u.email ? ' — ' + esc(u.email) : ''}</option>`).join('');
+}
+
+async function openUser(id) {
+  const u = await get('/api/users/' + encodeURIComponent(id));
+  $('#drawer').innerHTML = `
+    <button class="x" onclick="document.getElementById('drawer').classList.remove('on')">×</button>
+    <div class="who" style="margin:4px 0 14px">${avatar(u)}<div><b style="font-size:18px">${esc(u.name)}</b>
+      <div class="sub">${esc(u.email || '')} · signed in as ${esc(u.signInName)}</div>
+      ${u.status ? `<div class="status">${esc(u.status)}</div>` : ''}</div></div>
+    <div class="cards">
+      <div class="card"><div class="label">First seen</div><div>${when(u.firstSeen)}</div></div>
+      <div class="card"><div class="label">Last active</div><div>${ago(u.lastActive)}</div></div>
+      <div class="card"><div class="label">Sets</div><div class="value">${u.setsTotal}</div></div>
+      <div class="card"><div class="label">Km</div><div class="value">${u.km}</div></div>
+    </div>
+    <div class="panel"><h2>Recent workouts</h2>${u.recentWorkouts.length ? `<table>${u.recentWorkouts.map((w) =>
+      `<tr><td>${esc(w.exercise)}</td><td>${w.sets}×${w.reps}${w.weightKg ? ' @ ' + w.weightKg + ' kg' : ''}</td>
+       <td class="sub">${esc(w.date)}</td></tr>`).join('')}</table>` : '<p class="muted">None yet.</p>'}</div>
+    <div class="panel"><h2>Recent runs</h2>${u.recentRuns.length ? `<table>${u.recentRuns.map((r) =>
+      `<tr><td>${r.km} km</td><td>${r.minutes} min</td><td class="sub">${when(r.startedAt)}</td></tr>`).join('')}</table>`
+      : '<p class="muted">None yet.</p>'}</div>
+    <div class="panel"><h2>Messages sent to them</h2>${u.notifications.length ? u.notifications.map((n) =>
+      `<div class="note"><b>${esc(n.title)}</b><div>${esc(n.body)}</div><div class="sub">${when(n.sentAt)}</div></div>`).join('')
+      : '<p class="muted">None yet.</p>'}
+      <button class="btn" onclick="messageUser('${esc(u.userId)}')">Message ${esc(u.name)}</button></div>`;
+  $('#drawer').classList.add('on');
+}
+
+function messageUser(id) {
+  $('#drawer').classList.remove('on');
+  document.querySelector('nav button[data-tab="notify"]').click();
+  $('#target').value = id;
+  $('#title').focus();
+}
+
+async function loadSent() {
+  const sent = await get('/api/notifications');
+  $('#sent').innerHTML = sent.map((n) => `
+    <div class="note"><b>${esc(n.title)}</b> <span class="sub">→ ${esc(n.to)}</span>
+      <div>${esc(n.body)}</div><div class="sub">${when(n.sentAt)}</div></div>`).join('')
+    || '<p class="muted">Nothing sent yet.</p>';
+}
+
+$('#search').oninput = renderUsers;
+
+$('#send').onclick = async () => {
+  const userId = $('#target').value || null;
+  const title = $('#title').value.trim(), body = $('#body').value.trim();
+  if (!title || !body) return toast('Add a title and a message.');
+  if (!userId && !confirm(`Send "${title}" to EVERY user?`)) return;
+  $('#send').disabled = true;
+  try {
+    const r = await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Movara-Admin': '1' },
+      body: JSON.stringify({ userId, title, body }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    $('#title').value = ''; $('#body').value = '';
+    toast('Sent ✓');
+    loadSent(); loadOverview();
+  } catch (e) { toast('Failed: ' + e.message); }
+  finally { $('#send').disabled = false; }
+};
+
+(async () => {
+  try { await Promise.all([loadOverview(), loadUsers(), loadSent()]); }
+  catch (e) { toast('Could not load: ' + e.message); }
+})();
+</script>
+</body>
+</html>

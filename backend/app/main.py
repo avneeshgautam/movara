@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import config, db
-from .routers import chat, exercises, runs, social, workout_entries
+from .routers import chat, exercises, notifications, runs, social, workout_entries
 
 
 @asynccontextmanager
@@ -77,3 +77,4 @@ app.include_router(workout_entries.router)
 app.include_router(chat.router)
 app.include_router(social.router)
 app.include_router(runs.router)
+app.include_router(notifications.router)

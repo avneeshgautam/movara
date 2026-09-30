@@ -6,6 +6,8 @@ import '../services/auth_service.dart';
 import '../services/reminder_scheduler.dart';
 import '../services/chat_controller.dart';
 import '../services/goal_store.dart';
+import '../services/inbox.dart';
+import '../services/water_notifications.dart';
 import '../services/motivation_reminders.dart';
 import '../services/run_store.dart';
 import '../models/run_record.dart' show formatDuration;
@@ -42,7 +44,7 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   late final ApiService _api =
       ApiService(tokenProvider: widget.auth.idToken);
   final _reminders = ReminderScheduler();
@@ -77,10 +79,80 @@ class _HomeShellState extends State<HomeShell> {
     // Register name/photo so this user shows on the leaderboard.
     _api.upsertProfile(_displayName,
         photoUrl: widget.auth.currentUser?.photoURL);
+    WidgetsBinding.instance.addObserver(this);
+    _checkInbox();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // No push service yet: pick up admin messages whenever the app returns.
+    if (state == AppLifecycleState.resumed) _checkInbox();
+  }
+
+  late final Inbox _inbox = Inbox(_api);
+  bool _checkingInbox = false;
+
+  /// Shows new messages from the Movara team as a notification and a card
+  /// at the top of the screen.
+  Future<void> _checkInbox() async {
+    if (_checkingInbox) return;
+    _checkingInbox = true;
+    try {
+      final messages = await _inbox.fetchNew();
+      if (messages.isEmpty || !mounted) return;
+      final latest = messages.last;
+      // System notification (shows if the user allowed notifications).
+      const WaterNotifications().show(latest.title, latest.body);
+      _showInboxBanner(messages);
+    } catch (_) {
+      // Offline or backend asleep: try again on the next resume.
+    } finally {
+      _checkingInbox = false;
+    }
+  }
+
+  void _showInboxBanner(List<InboxMessage> messages) {
+    final c = context.movara;
+    final shown = messages.reversed.take(3).toList(); // newest first
+    final messenger = ScaffoldMessenger.of(context)
+      ..hideCurrentMaterialBanner();
+    messenger.showMaterialBanner(MaterialBanner(
+      backgroundColor: c.surface,
+      leading: const Text('📣', style: TextStyle(fontSize: 22)),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final m in shown) ...[
+            Text(m.title,
+                style: AppTheme.display(
+                    color: c.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800)),
+            const SizedBox(height: 2),
+            Text(m.body,
+                style: TextStyle(color: c.textSecondary, fontSize: 13)),
+            const SizedBox(height: 8),
+          ],
+          if (messages.length > shown.length)
+            Text('+${messages.length - shown.length} more',
+                style: TextStyle(color: c.textMuted, fontSize: 11)),
+        ],
+      ),
+      actions: [
+        TextButton(
+          key: const ValueKey('inbox-dismiss'),
+          onPressed: messenger.hideCurrentMaterialBanner,
+          child: Text('Got it', style: TextStyle(color: c.accent)),
+        ),
+      ],
+    ));
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _reminders.dispose();
     _runs.dispose();
     _workoutTimer.dispose();

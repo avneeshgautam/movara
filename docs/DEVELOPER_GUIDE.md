@@ -81,6 +81,11 @@ movara/
 │   ├── workflows/deploy-frontend.yml   Web build → Cloudflare Pages (movara-app)
 │   ├── workflows/android-apk.yml       Signed APK → emulator smoke test → GitHub release
 │   └── scripts/android-smoke.sh        Installs + launches the APK on the CI emulator
+├── admin/                    LOCAL-ONLY admin dashboard (never deployed)
+│   ├── run-admin.sh          Starts it on http://127.0.0.1:8090
+│   ├── admin_app.py          Growth/users/notify API over the live DB
+│   ├── dashboard.html        The dashboard page
+│   └── README.md             How to run it, optional Firebase key
 ├── backend/                  FastAPI + SQLAlchemy (PostgreSQL)
 │   ├── app/main.py           App, CORS, 422→400 mapping, router registration
 │   ├── app/config.py         All environment variables
@@ -148,7 +153,10 @@ floating ✨ button opens the AI assistant.
 | Gym motivation (morning/evening, AI text) | Account → Health → Gym Motivation | `services/motivation_reminders.dart` | `routers/chat.py` (writes the message) | `tabs_test.dart` |
 | Leaderboard ("Feed" tab) | `screens/leaderboard_tab.dart` | `models/leaderboard_entry.dart` | `routers/social.py` | — |
 | AI assistant (✨ button) | `screens/feed_tab.dart` | `services/chat_controller.dart` | `routers/chat.py` | backend `tests/test_chat.py` |
-| Account: username, profile photo, body stats, toggles, download app | `screens/account_tab.dart` | `services/api_service.dart` | `routers/social.py` (profile, photo) | `profile_photo_test.dart`, `tabs_test.dart` |
+| Account: one public name, status, profile photo, body stats, toggles, download app | `screens/account_tab.dart` (incl. `_EditProfilePage`) | `services/api_service.dart` | `routers/social.py` (profile, photo, status) | `profile_edit_pro_test.dart`, `profile_photo_test.dart`, `tabs_test.dart` |
+| Movara Pro (upgrade screen, daily AI message) | `screens/upgrade_screen.dart`; ⚡ PRO pill in `widgets/movara_header.dart`; Account → Movara Pro | `services/daily_pitch.dart` | `routers/chat.py` (writes the line) | `profile_edit_pro_test.dart` |
+| Team messages (admin → users) | banner in `home_shell.dart` (`_showInboxBanner`) | `services/inbox.dart` (checks on launch/resume) | `routers/notifications.py`; sent from `admin/` | `inbox_test.dart`, backend `tests/test_notifications.py` |
+| Admin dashboard (local only) | `admin/dashboard.html` | `admin/admin_app.py` | reads the live DB directly | manual — see `admin/README.md` |
 | Theme (light/dark, colours, fonts) | `theme/app_theme.dart`, `theme/movara_colors.dart` | toggled in `main.dart` | — | `test/theme_test.dart` |
 
 **Finding anything else:** `grep -rn "Visible text on screen" frontend/lib`
@@ -163,8 +171,9 @@ lands you in the right file almost every time.
 | `exercises` | Exercise names + categories | Seeded on first start |
 | `workout_entries` | Every logged set (per user) | Source of truth for streaks, stats, PRs, history |
 | `runs` | Run summaries (date, time, distance) | Routes stay on the device; used to restore after reinstall and for leaderboard points |
-| `profiles` | Display name, username, `photo_url`, `photo_custom` | Upserted by the app on every launch |
+| `profiles` | Sign-in name, `username` (the one public name), `status`, `photo_url`, `photo_custom`, `created_at`, `last_seen_at` | Upserted by the app on every launch (which also sets `last_seen_at`) |
 | `profile_photos` | Uploaded photo bytes | Separate so leaderboard queries don't load images |
+| `notifications` | Admin messages: `user_id` (null = everyone), title, body | Written by the local admin dashboard; read by the app |
 
 **API endpoints** (all under `/api`, all require the Bearer token unless noted):
 
@@ -176,6 +185,7 @@ lands you in the right file almost every time.
 | PUT | `/profile` · GET `/profile/me` · GET `/profile/username-available` | `social.py` |
 | PUT / DELETE | `/profile/photo` · GET `/profile/photo/{userId}` (**public**) | `social.py` |
 | GET | `/leaderboard` | `social.py` |
+| GET | `/notifications?since=…` | `notifications.py` |
 | POST | `/chat` · `/chat/stream` | `chat.py` |
 
 Interactive docs: run the backend locally and open `http://localhost:8080/docs`.
@@ -194,6 +204,8 @@ These are **not synced** — they're per device and reset if the app is deleted
 | `reminders_v2`, `reminders_seeded_v1` | `services/reminder_scheduler.dart` | Reminders + active hours |
 | `gym_motivation_*`, `toggle_Gym Motivation` | `services/motivation_reminders.dart` | Motivation times + on/off |
 | `toggle_*`, `body_*`, `health_connected` | `screens/account_tab.dart` | Settings toggles, body stats |
+| `pro_pitch_day`, `pro_pitch_text`, `pro_waitlist` | `services/daily_pitch.dart`, `screens/upgrade_screen.dart` | Today's cached Pro message; "notify me" |
+| `inbox_last_seen` | `services/inbox.dart` | Newest admin message already shown |
 
 > If you want one of these on every device (e.g. workout sessions on the
 > leaderboard), it needs a backend table + endpoint — see recipe C below.
@@ -409,7 +421,8 @@ gitignored file on the Mac or in a dashboard.
 | Mac, gitignored | `frontend/ios/Runner/GoogleService-Info.plist` | Firebase iOS config |
 | Mac, gitignored | `frontend/android/app/google-services.json` | Firebase Android config |
 | Mac, gitignored | `frontend/android/key.properties` + `app/upload-keystore.jks` | **Android release key** — backed up in `~/.movara-android-signing/`. **Losing it means the Android app can never be updated.** Keep a second backup somewhere safe. |
-| Mac, gitignored | `backend/run-local.sh` | Local backend env (DB URL, keys) |
+| Mac, gitignored | `backend/run-local.sh` | Local backend env (DB URL, keys); the admin dashboard reuses its `DATABASE_URL` |
+| Mac, gitignored (optional) | `admin/service-account.json` | Firebase service-account key for emails / sign-up times in the admin dashboard. Full admin access to Firebase — never commit or share. |
 
 **Firebase settings that matter:**
 

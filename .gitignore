@@ -8,3 +8,8 @@
 node_modules/
 package.json
 package-lock.json
+
+# Admin dashboard: Firebase service-account key (full admin access to the
+# Firebase project). Never commit it.
+admin/service-account.json
+admin/__pycache__/

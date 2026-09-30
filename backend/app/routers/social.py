@@ -35,10 +35,13 @@ def upsert_profile(
     uid: str = Depends(current_uid),
     session: Session = Depends(db.get_session),
 ) -> None:
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     profile = session.get(db.Profile, uid)
     if profile is None:
-        profile = db.Profile(user_id=uid)
+        profile = db.Profile(user_id=uid, created_at=now)
         session.add(profile)
+    # The app upserts on every launch, so this doubles as "last active".
+    profile.last_seen_at = now
     profile.display_name = body.displayName.strip()[:120]
     # Clients send their Google photo on every sign-in; an uploaded photo wins.
     if not profile.photo_custom:

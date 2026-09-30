@@ -189,6 +189,34 @@ class ApiService {
     });
   }
 
+  /// Messages from the Movara team (the local admin dashboard) for this user
+  /// or everyone, newer than [since], oldest first.
+  Future<List<({String id, String title, String body, DateTime sentAt})>>
+      fetchNotifications({DateTime? since}) async {
+    final response = await _client.get(
+      _uri('/notifications',
+          since == null ? null : {'since': since.toUtc().toIso8601String()}),
+      headers: await _headers(),
+    );
+    _checkOk(response);
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return [
+      for (final raw in list.cast<Map<String, dynamic>>())
+        (
+          id: raw['id'] as String,
+          title: raw['title'] as String,
+          body: raw['body'] as String,
+          sentAt: _utc(raw['createdAt'] as String),
+        ),
+    ];
+  }
+
+  /// The server sends naive UTC timestamps; parse them as UTC, not local.
+  static DateTime _utc(String iso) {
+    final hasZone = iso.endsWith('Z') || RegExp(r'[+-]\d\d:\d\d$').hasMatch(iso);
+    return DateTime.parse(hasZone ? iso : '${iso}Z').toUtc();
+  }
+
   /// Removes the uploaded photo; the profile falls back to the sign-in photo.
   Future<void> removeProfilePhoto() async {
     final response =
