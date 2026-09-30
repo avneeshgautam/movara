@@ -51,6 +51,17 @@ class WaterNotifications {
     required List<DateTime> at,
   }) async {}
 
+  Future<void> scheduleWeeklyAt({
+    required int id,
+    required int weekday,
+    required int hour,
+    required int minute,
+    required String title,
+    required String body,
+  }) async {}
+
+  Future<void> cancelRange(int from, int to) async {}
+
   Future<bool> isScheduled(int id) async => false;
 
   Future<void> cancelAll() async {}

@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/reminder_scheduler.dart';
 import '../services/chat_controller.dart';
 import '../services/goal_store.dart';
+import '../services/habit_store.dart';
 import '../services/inbox.dart';
 import '../services/water_notifications.dart';
 import '../services/motivation_reminders.dart';
@@ -50,6 +51,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   final _reminders = ReminderScheduler();
   final _workoutTimer = WorkoutTimer();
   final _workoutLog = WorkoutLog();
+  final _habits = HabitStore();
   final _goals = GoalStore();
   late final ChatController _chat = ChatController(api: _api);
   late final RunStore _runs =
@@ -75,6 +77,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _runs.load();
     _workoutTimer.load();
     _workoutLog.load();
+    _habits.load();
     _goals.load();
     // Register name/photo so this user shows on the leaderboard.
     _api.upsertProfile(_displayName,
@@ -157,6 +160,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _runs.dispose();
     _workoutTimer.dispose();
     _workoutLog.dispose();
+    _habits.dispose();
     _goals.dispose();
     _chat.dispose();
     _api.dispose();
@@ -268,6 +272,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   runStore: _runs,
                   goalStore: _goals,
                   workoutLog: _workoutLog,
+                  habitStore: _habits,
                   onReload: _reload,
                 ),
                 WorkoutTab(
@@ -291,6 +296,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   onSignOut: widget.auth.signOut,
                   onNameChanged: (name) => setState(() => _publicName = name),
                   onOpenUpgrade: _openUpgrade,
+                  habitStore: _habits,
                   onOpenTab: _onTab,
                 ),
               ],

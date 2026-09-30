@@ -149,6 +149,7 @@ floating ✨ button opens the AI assistant.
 | Share card / photo overlay | `widgets/share_card.dart`, `overlay_card.dart` | `services/share_image*.dart` (web/native split) | — | `running_test.dart` |
 | iOS Lock Screen / Dynamic Island timer | native: `ios/MovaraLiveActivity/`, `ios/Shared/MovaraActivityAttributes.swift`, `ios/Runner/LiveActivityBridge.swift` | `services/live_activity.dart`; started by `running_tab.dart` and `workout_timer.dart` | — | `test/workout_live_activity_test.dart` |
 | Apple Health steps / heart rate (iOS only) | Account → Connected Apps; steps tile in `home_tab.dart` | `services/health_service.dart` | — | — |
+| Habit tracker (Home "Today's Habits", all habits, editor, detail, celebrations) | `_HabitsSection` in `home_tab.dart`; `screens/habits_screen.dart` (list, editor, detail); `widgets/habit_widgets.dart` (row, ring, week strip, 12-week heatmap); `widgets/celebration.dart` (confetti) | `models/habit.dart` (due/done/streak/rate rules), `services/habit_store.dart` (check-ins, reminders) | — (on device) | `test/habit_test.dart`, `habit_ui_test.dart` |
 | Reminders with active hours | `screens/reminders_tab.dart` | `services/reminder_scheduler.dart`, `models/reminder.dart` (`upcomingTimes()`), `services/water_notifications*.dart` | — (on device, OS-scheduled) | `reminders_test.dart`, `reminder_hours_test.dart` |
 | Gym motivation (morning/evening, AI text) | Account → Health → Gym Motivation | `services/motivation_reminders.dart` | `routers/chat.py` (writes the message) | `tabs_test.dart` |
 | Leaderboard ("Feed" tab) | `screens/leaderboard_tab.dart` | `models/leaderboard_entry.dart` | `routers/social.py` | — |
@@ -206,6 +207,7 @@ These are **not synced** — they're per device and reset if the app is deleted
 | `toggle_*`, `body_*`, `health_connected` | `screens/account_tab.dart` | Settings toggles, body stats |
 | `pro_pitch_day`, `pro_pitch_text`, `pro_waitlist` | `services/daily_pitch.dart`, `screens/upgrade_screen.dart` | Today's cached Pro message; "notify me" |
 | `inbox_last_seen` | `services/inbox.dart` | Newest admin message already shown |
+| `habits_v1` | `services/habit_store.dart` | Habits + their full completion logs |
 
 > If you want one of these on every device (e.g. workout sessions on the
 > leaderboard), it needs a backend table + endpoint — see recipe C below.
@@ -341,7 +343,10 @@ Pattern used by `GoalStore`, `WorkoutLog`, `RunStore`, `ReminderScheduler`:
 - **IDs:** repeating reminders use `baseId * 1000 + n`; **daily** notifications
   (like gym motivation) must use IDs **≥ 900000**
   (`WaterNotifications.dailyIdFloor`) or reminder rescheduling will cancel them.
-- iOS keeps at most **64** pending notifications; reminders share a budget of 48.
+  Taken ranges: gym motivation 910001–910002, habits 930000–1029999
+  (`HabitStore.idBase`).
+- iOS keeps at most **64** pending notifications. Budget: water reminders 40,
+  gym motivation 2, habit reminders up to 20 (`HabitStore.maxReminderSlots`).
 - Times use the phone's timezone (`flutter_timezone`); don't build `DateTime`s
   in UTC for user-facing times.
 

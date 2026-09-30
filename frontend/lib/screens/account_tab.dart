@@ -9,6 +9,7 @@ import '../models/run_record.dart';
 import '../models/workout_entry.dart';
 import '../services/api_service.dart';
 import '../services/badges.dart';
+import '../services/habit_store.dart';
 import '../services/health_service.dart';
 import '../services/motivation_reminders.dart';
 import '../services/run_store.dart';
@@ -16,6 +17,7 @@ import '../services/workout_log.dart';
 import '../theme/app_theme.dart';
 import '../theme/movara_colors.dart';
 import '../widgets/badges_grid.dart';
+import 'habits_screen.dart';
 
 /// Profile / account screen.
 ///
@@ -38,6 +40,7 @@ class AccountTab extends StatefulWidget {
     this.onSignOut,
     this.onNameChanged,
     this.onOpenUpgrade,
+    this.habitStore,
   });
 
   final ApiService api;
@@ -54,6 +57,9 @@ class AccountTab extends StatefulWidget {
 
   /// Opens the Movara Pro upgrade screen.
   final VoidCallback? onOpenUpgrade;
+
+  /// The user's habits, for the Habits row.
+  final HabitStore? habitStore;
 
   /// Switches the shell to another bottom tab (0=Home,1=Workout,3=Reminders).
   final void Function(int index)? onOpenTab;
@@ -1039,6 +1045,11 @@ class _AccountTabState extends State<AccountTab> {
         title: 'Preferences',
         items: [
           _MenuAction('🎯', 'Edit Goals', onTap: () => widget.onOpenTab?.call(0)),
+          if (widget.habitStore != null)
+            _MenuAction('🌱', 'Habits',
+                subtitle: 'Track habits, streaks and reminders',
+                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => HabitsScreen(store: widget.habitStore!)))),
           _MenuAction('📊', 'Progress History',
               onTap: () => widget.onOpenTab?.call(1)),
           _MenuAction('🔔', 'Notifications', toggleKey: 'Notifications'),

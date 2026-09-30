@@ -19,8 +19,9 @@ class WaterNotifications {
 
   /// iOS refuses more than 64 pending notifications, so a repeating reminder
   /// is a rolling batch that is topped up whenever the settings change or the
-  /// app is opened.
-  static const _maxScheduled = 48;
+  /// app is opened. Budget: 40 water reminders + 2 gym motivation + up to 20
+  /// habit reminders (HabitStore.maxReminderSlots) ≤ 64.
+  static const _maxScheduled = 40;
 
   static const _details = NotificationDetails(
     iOS: DarwinNotificationDetails(
@@ -181,6 +182,43 @@ class WaterNotifications {
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
     );
+  }
+
+  /// Repeats every week on [weekday] (1 = Monday … 7 = Sunday) at the time.
+  Future<void> scheduleWeeklyAt({
+    required int id,
+    required int weekday,
+    required int hour,
+    required int minute,
+    required String title,
+    required String body,
+  }) async {
+    if (!isSupported) return;
+    await _ensureInit();
+    final now = tz.TZDateTime.now(tz.local);
+    var when =
+        tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    while (when.weekday != weekday || !when.isAfter(now)) {
+      when = when.add(const Duration(days: 1));
+    }
+    await _plugin.zonedSchedule(
+      id: id,
+      title: title,
+      body: body,
+      scheduledDate: when,
+      notificationDetails: _details,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+    );
+  }
+
+  /// Cancels every pending notification with an id in [from, to).
+  Future<void> cancelRange(int from, int to) async {
+    if (!isSupported) return;
+    await _ensureInit();
+    for (final p in await _plugin.pendingNotificationRequests()) {
+      if (p.id >= from && p.id < to) await _plugin.cancel(id: p.id);
+    }
   }
 
   Future<void> cancel(int id) async {
