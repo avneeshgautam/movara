@@ -18,6 +18,7 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/android-apk.yml"
+      - ".github/scripts/android-smoke.sh"
   workflow_dispatch: {}
 
 permissions:
@@ -84,6 +85,25 @@ jobs:
             exit "$code"
           fi
 
+      # Boot an emulator, install, launch, and require the app to still be
+      # running. Catches crash-on-launch bugs before anything is published.
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Smoke test (launch on an emulator)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash .github/scripts/android-smoke.sh frontend/build/app/outputs/flutter-apk/app-release.apk
+
       - name: Publish to the android-latest release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -96,4 +116,9 @@ jobs:
               --title "Movara for Android (latest)" --notes "$notes"
           fi
           gh release upload android-latest movara.apk --clobber
+          # What the app looked like on the emulator, as proof it launched.
+          if [ -f smoke.png ]; then
+            cp smoke.png launch-screenshot.png
+            gh release upload android-latest launch-screenshot.png --clobber
+          fi
           gh release edit android-latest --notes "$notes"
