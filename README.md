@@ -1,27 +1,21 @@
 # movara
 Move + Vara = Move towards your better self.
 
-A simple workout tracker: log how many reps and sets you did per exercise.
+A workout and running tracker: category-based workout logging with PRs, GPS
+run/walk/hike recording, goals, badges, reminders, a leaderboard and an AI
+fitness assistant — one Flutter app for iPhone, Android and the web, on a
+FastAPI + PostgreSQL backend.
 
-## Structure
+- **Web app:** https://movara-app.pages.dev
+- **Android:** Account → Download App in the app, or the `android-latest` release
+
+## Start here
+
+**[docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** — architecture, where
+every feature lives, how to add or change features, and how to ship.
 
 ```
-backend/    FastAPI REST API (Python, MongoDB Atlas)
-frontend/   Flutter app (mobile + web) that talks to the backend
+backend/    FastAPI REST API (Python, PostgreSQL, Firebase auth) → Render
+frontend/   Flutter app (iOS, Android, web)
+docs/       Developer guide
 ```
-
-See [backend/README.md](backend/README.md) and
-[frontend/README.md](frontend/README.md) for how to run each half.
-
-## Quick start
-
-```bash
-# Terminal 1
-cd backend && ./run-local.sh          # or: .venv/bin/uvicorn app.main:app --reload
-
-# Terminal 2
-cd frontend && flutter run -d chrome
-```
-
-This is an intentionally minimal first scaffold — one entity for exercises,
-one for logged sets, a couple of screens. Extend from here.
