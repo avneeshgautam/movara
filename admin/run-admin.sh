@@ -13,7 +13,22 @@ if [ -z "${DATABASE_URL:-}" ]; then
     eval "$(grep -E '^export DATABASE_URL=' "$LOCAL_ENV")"
   fi
 fi
-: "${DATABASE_URL:?set DATABASE_URL, or add 'export DATABASE_URL=...' to backend/run-local.sh}"
+if [ -z "${DATABASE_URL:-}" ] || [[ "$DATABASE_URL" == *PASTE_YOUR* ]]; then
+  cat >&2 <<'MSG'
+error: no database connection string yet.
+
+Put the live database URL in backend/run-local.sh (gitignored, stays on
+this Mac):
+
+  export DATABASE_URL="postgresql://..."
+
+Where to copy it from (either works):
+  - Render → movara-backend → Environment → DATABASE_URL
+  - Supabase → your project → Connect → "Session pooler" connection string
+    (fill in your database password)
+MSG
+  exit 1
+fi
 export DATABASE_URL
 
 PY=../backend/.venv/bin/python

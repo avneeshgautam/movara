@@ -10,8 +10,17 @@ never deployed and isn't reachable from the app or the internet.
 ./admin/run-admin.sh        # opens http://127.0.0.1:8090
 ```
 
-It reads `DATABASE_URL` from `backend/run-local.sh` (the same live database
-the app uses), so there's nothing new to configure. Stop it with Ctrl+C.
+It reads `DATABASE_URL` from `backend/run-local.sh` (gitignored). **One-time
+setup:** put the live database's connection string there —
+
+```bash
+export DATABASE_URL="postgresql://..."
+```
+
+— copied from Render → movara-backend → Environment → `DATABASE_URL`, or
+from Supabase → your project → **Connect** → *Session pooler* (fill in your
+database password). Keep it in that file only; never commit or paste it
+anywhere. Stop the dashboard with Ctrl+C.
 
 ## What it shows
 
