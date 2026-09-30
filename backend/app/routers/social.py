@@ -57,6 +57,8 @@ def upsert_profile(
                     status_code=409, detail="That username is already taken."
                 )
         profile.username = wanted
+    if body.status is not None:
+        profile.status = body.status[:100] or None
     session.commit()
 
 
@@ -89,6 +91,7 @@ def my_profile(
     return MyProfile(
         displayName=profile.display_name,
         username=profile.username,
+        status=profile.status,
         photoUrl=profile.photo_url,
         photoCustom=profile.photo_custom,
     )
@@ -238,7 +241,9 @@ def leaderboard(
         sets = int(sets_by_user.get(p.user_id, 0))
         km = float(metres_by_user.get(p.user_id, 0.0)) / 1000
         points = round(sets * _POINTS_PER_SET + km * _POINTS_PER_KM)
-        rows.append((p.user_id, _public_name(p, uid), p.photo_url, sets, km, points))
+        rows.append(
+            (p.user_id, _public_name(p, uid), p.photo_url, sets, km, points, p.status)
+        )
 
     # Highest points first; ties broken by name so the order is stable.
     rows.sort(key=lambda r: (-r[5], r[1].lower()))
@@ -248,11 +253,12 @@ def leaderboard(
             userId=user_id,
             displayName=name,
             photoUrl=photo,
+            status=status,
             points=points,
             setsThisWeek=sets,
             kmThisWeek=round(km, 2),
             rank=i + 1,
             isMe=user_id == uid,
         )
-        for i, (user_id, name, photo, sets, km, points) in enumerate(rows)
+        for i, (user_id, name, photo, sets, km, points, status) in enumerate(rows)
     ]

@@ -79,6 +79,8 @@ class ProfileRequest(BaseModel):
     displayName: str
     photoUrl: str | None = None
     username: str | None = None
+    # None = not provided (keep); "" = clear it.
+    status: str | None = None
 
     @field_validator("displayName")
     @classmethod
@@ -91,10 +93,16 @@ class ProfileRequest(BaseModel):
         # None means "not provided"; an empty string means "clear it".
         return None if v is None else v.strip()
 
+    @field_validator("status")
+    @classmethod
+    def _status(cls, v: str | None) -> str | None:
+        return None if v is None else v.strip()
+
 
 class MyProfile(BaseModel):
     displayName: str
     username: str | None = None
+    status: str | None = None
     photoUrl: str | None = None
     # True when photoUrl is a photo the user uploaded (vs. their Google one).
     photoCustom: bool = False
@@ -117,6 +125,7 @@ class LeaderboardEntry(BaseModel):
     userId: str
     displayName: str
     photoUrl: str | None = None
+    status: str | None = None
     points: int
     setsThisWeek: int
     kmThisWeek: float

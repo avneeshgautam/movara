@@ -101,8 +101,15 @@ class ApiService {
   /// Registers (or updates) the signed-in user's name and photo so they can
   /// appear on the leaderboard. Throws [UsernameTaken] if the chosen username
   /// is already in use; other failures are swallowed (best-effort).
+  ///
+  /// [username] and [status] are only changed when given; "" clears them.
+  /// With [strict], a failed save throws instead of being swallowed, so the
+  /// Edit profile screen can say so.
   Future<void> upsertProfile(String displayName,
-      {String? photoUrl, String? username}) async {
+      {String? photoUrl,
+      String? username,
+      String? status,
+      bool strict = false}) async {
     try {
       final response = await _client.put(
         _uri('/profile'),
@@ -111,12 +118,15 @@ class ApiService {
           'displayName': displayName,
           'photoUrl': photoUrl,
           if (username != null) 'username': username,
+          if (status != null) 'status': status,
         }),
       );
       if (response.statusCode == 409) throw const UsernameTaken();
+      if (strict) _checkOk(response, expected: 204);
     } on UsernameTaken {
       rethrow;
     } catch (_) {
+      if (strict) rethrow;
       // Not fatal -- the board just won't show this user until it succeeds.
     }
   }
@@ -145,6 +155,7 @@ class ApiService {
       ({
         String displayName,
         String? username,
+        String? status,
         String? photoUrl,
         bool photoCustom,
       })> fetchMyProfile() async {
@@ -155,6 +166,7 @@ class ApiService {
     return (
       displayName: (data['displayName'] as String?) ?? '',
       username: data['username'] as String?,
+      status: data['status'] as String?,
       photoUrl: data['photoUrl'] as String?,
       photoCustom: data['photoCustom'] as bool? ?? false,
     );

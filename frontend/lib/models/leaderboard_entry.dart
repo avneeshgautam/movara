@@ -9,6 +9,7 @@ class LeaderboardEntry {
     required this.rank,
     required this.isMe,
     this.photoUrl,
+    this.status,
   });
 
   final String userId;
@@ -20,6 +21,9 @@ class LeaderboardEntry {
   final bool isMe;
   final String? photoUrl;
 
+  /// The user's short profile status, if they've set one.
+  final String? status;
+
   factory LeaderboardEntry.fromJson(Map<String, dynamic> json) => LeaderboardEntry(
         userId: json['userId'] as String,
         displayName: json['displayName'] as String,
@@ -29,5 +33,6 @@ class LeaderboardEntry {
         rank: json['rank'] as int,
         isMe: json['isMe'] as bool,
         photoUrl: json['photoUrl'] as String?,
+        status: json['status'] as String?,
       );
 }

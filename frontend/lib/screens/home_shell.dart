@@ -21,6 +21,7 @@ import 'leaderboard_tab.dart';
 import 'home_tab.dart';
 import 'reminders_tab.dart';
 import 'running_tab.dart';
+import 'upgrade_screen.dart';
 import 'workout_tab.dart';
 
 /// App shell: sticky header, tab content, and the bottom tab bar from the
@@ -53,6 +54,10 @@ class _HomeShellState extends State<HomeShell> {
       RunStore(uploader: _api.uploadRun, downloader: _api.fetchRuns);
   int _index = 0;
 
+  /// The user's chosen public name, once loaded; the greeting uses it so the
+  /// app shows one name everywhere.
+  String? _publicName;
+
   // Entry list lives here, shared by Home (stats) and Workout (log), so a
   // create/delete on one tab refreshes the other.
   late Future<List<WorkoutEntry>> _entriesFuture;
@@ -64,6 +69,7 @@ class _HomeShellState extends State<HomeShell> {
     _reminders.load();
     // Restore the 6am/5pm gym notifications if they're on but missing.
     MotivationReminders(_api).ensureScheduled();
+    _loadPublicName();
     _runs.load();
     _workoutTimer.load();
     _workoutLog.load();
@@ -88,6 +94,24 @@ class _HomeShellState extends State<HomeShell> {
   Future<void> _reload() async {
     setState(() => _entriesFuture = _api.fetchWorkoutEntries());
     await _entriesFuture;
+  }
+
+  Future<void> _loadPublicName() async {
+    try {
+      final me = await _api.fetchMyProfile();
+      final chosen = me.username?.trim();
+      if (mounted && chosen != null && chosen.isNotEmpty) {
+        setState(() => _publicName = chosen);
+      }
+    } catch (_) {
+      // Keep the sign-in name.
+    }
+  }
+
+  void _openUpgrade() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => UpgradeScreen(api: _api),
+    ));
   }
 
   /// Best available name for the signed-in user.
@@ -157,7 +181,8 @@ class _HomeShellState extends State<HomeShell> {
       body: Column(
         children: [
           MovaraHeader(
-            username: _displayName,
+            username: _publicName ?? _displayName,
+            onUpgrade: _openUpgrade,
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
             action: _TimerButton(timer: _workoutTimer, onTap: _openTimer),
@@ -192,6 +217,8 @@ class _HomeShellState extends State<HomeShell> {
                   email: widget.auth.currentUser?.email,
                   photoUrl: widget.auth.currentUser?.photoURL,
                   onSignOut: widget.auth.signOut,
+                  onNameChanged: (name) => setState(() => _publicName = name),
+                  onOpenUpgrade: _openUpgrade,
                   onOpenTab: _onTab,
                 ),
               ],

@@ -132,6 +132,8 @@ class Profile(Base):
     # Public handle chosen by the user; shown to others instead of the real
     # name. Null until they set one.
     username: Mapped[str | None] = mapped_column(String(40))
+    # Short free-text status shown under the name ("Training for a 10K").
+    status: Mapped[str | None] = mapped_column(String(100))
     # True once the user uploads their own photo: the Google photo the client
     # sends on every sign-in must then no longer overwrite photo_url.
     photo_custom: Mapped[bool] = mapped_column(
@@ -185,6 +187,9 @@ def _migrate(session: Session) -> None:
             "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS "
             "photo_custom BOOLEAN NOT NULL DEFAULT FALSE"
         )
+    )
+    session.execute(
+        text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS status VARCHAR(100)")
     )
     session.commit()
 

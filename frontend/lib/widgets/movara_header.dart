@@ -12,6 +12,7 @@ class MovaraHeader extends StatelessWidget {
     required this.isDark,
     required this.onToggleTheme,
     this.action,
+    this.onUpgrade,
   });
 
   final String username;
@@ -20,6 +21,9 @@ class MovaraHeader extends StatelessWidget {
 
   /// Optional control shown left of the theme toggle (the timer button).
   final Widget? action;
+
+  /// Opens Movara Pro; shows the small PRO pill when set.
+  final VoidCallback? onUpgrade;
 
   static String greetingFor(DateTime now) {
     if (now.hour < 12) return 'Good Morning';
@@ -82,12 +86,53 @@ class MovaraHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          if (onUpgrade != null) ...[
+            _ProPill(onTap: onUpgrade!),
+            const SizedBox(width: 8),
+          ],
           if (action != null) ...[
             action!,
             const SizedBox(width: 8),
           ],
           _ThemeToggle(isDark: isDark, onTap: onToggleTheme),
         ],
+      ),
+    );
+  }
+}
+
+/// Small gradient "⚡ PRO" pill that opens the upgrade screen.
+class _ProPill extends StatelessWidget {
+  const _ProPill({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+    return GestureDetector(
+      key: const ValueKey('pro-pill'),
+      onTap: onTap,
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 11),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          gradient: LinearGradient(
+            colors: [c.accent, Color.lerp(c.accent, Colors.black, 0.3)!],
+          ),
+          boxShadow: [BoxShadow(color: c.accentGlow, blurRadius: 10)],
+        ),
+        child: Text(
+          '⚡ PRO',
+          style: AppTheme.display(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+          ),
+        ),
       ),
     );
   }

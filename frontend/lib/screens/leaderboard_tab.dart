@@ -137,6 +137,18 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                     fontWeight: e.isMe ? FontWeight.w800 : FontWeight.w600,
                   ),
                 ),
+                if (e.status != null && e.status!.isNotEmpty) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    e.status!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: c.textSecondary,
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic),
+                  ),
+                ],
                 const SizedBox(height: 2),
                 Text(
                   '${e.setsThisWeek} sets · ${e.kmThisWeek.toStringAsFixed(1)} km',

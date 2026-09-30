@@ -36,6 +36,8 @@ class AccountTab extends StatefulWidget {
     this.email,
     this.photoUrl,
     this.onSignOut,
+    this.onNameChanged,
+    this.onOpenUpgrade,
   });
 
   final ApiService api;
@@ -47,6 +49,12 @@ class AccountTab extends StatefulWidget {
   final String? photoUrl;
   final Future<void> Function()? onSignOut;
 
+  /// Told when the public name changes, so the header greeting follows it.
+  final ValueChanged<String>? onNameChanged;
+
+  /// Opens the Movara Pro upgrade screen.
+  final VoidCallback? onOpenUpgrade;
+
   /// Switches the shell to another bottom tab (0=Home,1=Workout,3=Reminders).
   final void Function(int index)? onOpenTab;
 
@@ -55,7 +63,15 @@ class AccountTab extends StatefulWidget {
 }
 
 class _AccountTabState extends State<AccountTab> {
-  String get _name => widget.displayName;
+  /// The one name shown everywhere: the unique public name (username) once
+  /// set, otherwise the sign-in name.
+  String get _name {
+    final chosen = _usernameController.text.trim();
+    return chosen.isNotEmpty ? chosen : widget.displayName;
+  }
+
+  /// Short free-text status shown under the name and on the leaderboard.
+  String _status = '';
   String get _handle => widget.email ?? 'Signed in';
 
   final _usernameController = TextEditingController();
@@ -224,6 +240,7 @@ class _AccountTabState extends State<AccountTab> {
         if (_usernameController.text.isEmpty) {
           _usernameController.text = me.username ?? '';
         }
+        _status = me.status ?? '';
         if (me.photoCustom && me.photoUrl != null) {
           _photoUrl = me.photoUrl;
           _photoCustom = true;
@@ -294,7 +311,8 @@ class _AccountTabState extends State<AccountTab> {
       try {
         await widget.api.removeProfilePhoto();
         // Put the sign-in photo back straight away rather than next launch.
-        await widget.api.upsertProfile(_name, photoUrl: widget.photoUrl);
+        await widget.api
+            .upsertProfile(widget.displayName, photoUrl: widget.photoUrl);
         if (mounted) {
           setState(() {
             _photoUrl = widget.photoUrl;
@@ -348,100 +366,30 @@ class _AccountTabState extends State<AccountTab> {
     }
   }
 
-  /// Edit the public username (also the leaderboard name). Enforces
-  /// uniqueness — a taken name is rejected with a clear message.
-  Future<void> _editUsername(BuildContext context) async {
-    final c = context.movara;
-    final controller =
-        TextEditingController(text: _usernameController.text.trim());
-    final saved = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        var busy = false;
-        String? error;
-        return StatefulBuilder(
-          builder: (dialogContext, setDialogState) {
-            Future<void> save() async {
-              final value = controller.text.trim();
-              setDialogState(() {
-                busy = true;
-                error = null;
-              });
-              // Pre-check for a friendlier message before writing.
-              if (value.isNotEmpty &&
-                  !await widget.api.isUsernameAvailable(value)) {
-                setDialogState(() {
-                  busy = false;
-                  error = 'That username is already taken.';
-                });
-                return;
-              }
-              try {
-                await widget.api.upsertProfile(widget.displayName,
-                    photoUrl: widget.photoUrl, username: value);
-                if (dialogContext.mounted) Navigator.pop(dialogContext, value);
-              } on UsernameTaken {
-                setDialogState(() {
-                  busy = false;
-                  error = 'That username is already taken.';
-                });
-              } catch (_) {
-                setDialogState(() {
-                  busy = false;
-                  error = "Couldn't save. Try again.";
-                });
-              }
-            }
-
-            return AlertDialog(
-              backgroundColor: c.surface,
-              shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Text('Your username',
-                  style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'This is your unique name on the leaderboard. Leave it blank '
-                    'to show just your first name.',
-                    style: TextStyle(
-                        color: c.textSecondary, fontSize: 12, height: 1.4),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: controller,
-                    autofocus: true,
-                    maxLength: 40,
-                    style: TextStyle(color: c.textPrimary, fontSize: 14),
-                    decoration: InputDecoration(
-                      prefixText: '@',
-                      hintText: 'IronMike',
-                      errorText: error,
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: busy ? null : () => Navigator.pop(dialogContext),
-                  child: Text('Cancel', style: TextStyle(color: c.textMuted)),
-                ),
-                TextButton(
-                  onPressed: busy ? null : save,
-                  child: Text(busy ? 'Saving…' : 'Save',
-                      style: TextStyle(color: c.accent)),
-                ),
-              ],
-            );
-          },
-        );
-      },
+  /// Opens Edit profile (photo, name, status). The name is the single public
+  /// name — unique, shown in the app and on the leaderboard.
+  Future<void> _editProfile(BuildContext context) async {
+    final saved = await Navigator.of(context).push<({String name, String status})>(
+      MaterialPageRoute(
+        builder: (_) => _EditProfilePage(
+          api: widget.api,
+          signInName: widget.displayName,
+          signInPhotoUrl: widget.photoUrl,
+          name: _name,
+          status: _status,
+          photoUrl: () => _photoUrl,
+          onChangePhoto: (pageContext) => _changePhoto(pageContext),
+        ),
+      ),
     );
-    if (saved != null && mounted) {
-      setState(() => _usernameController.text = saved);
-    }
+    if (saved == null || !mounted) return;
+    setState(() {
+      _usernameController.text = saved.name;
+      _status = saved.status;
+    });
+    widget.onNameChanged?.call(saved.name);
+    ScaffoldMessenger.of(this.context).showSnackBar(
+        const SnackBar(content: Text('Profile updated.')));
   }
 
   // Persisted per-device (see _loadBody / _editBody).
@@ -629,50 +577,76 @@ class _AccountTabState extends State<AccountTab> {
                     const SizedBox(height: 2),
                     Text(_handle,
                         style: TextStyle(color: c.textMuted, fontSize: 11)),
-                    const SizedBox(height: 4),
-                    // Editable public username (shown on the leaderboard).
-                    GestureDetector(
-                      onTap: () => _editUsername(context),
-                      behavior: HitTestBehavior.opaque,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _usernameController.text.trim().isEmpty
-                                ? 'Set a username'
-                                : '@${_usernameController.text.trim()}',
-                            style: AppTheme.display(
-                              color: c.accent,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
+                    if (_status.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _status,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: c.textSecondary,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (_badge.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: c.accentSoft,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                  color: c.accent.withValues(alpha: 0.3)),
+                            ),
+                            child: Text(
+                              _badge,
+                              style: AppTheme.display(
+                                color: c.accent,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.4,
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 5),
-                          Icon(Icons.edit, size: 12, color: c.accent),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (_badge.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: c.accentSoft,
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                              color: c.accent.withValues(alpha: 0.3)),
-                        ),
-                        child: Text(
-                          _badge,
-                          style: AppTheme.display(
-                            color: c.accent,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.4,
+                        GestureDetector(
+                          key: const ValueKey('edit-profile'),
+                          onTap: () => _editProfile(context),
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: c.border),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.edit, size: 11, color: c.accent),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Edit profile',
+                                  style: AppTheme.display(
+                                    color: c.accent,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -1092,6 +1066,9 @@ class _AccountTabState extends State<AccountTab> {
       (
         title: 'Account',
         items: [
+          _MenuAction('⚡', 'Movara Pro',
+              subtitle: 'Subscription · coming soon',
+              onTap: widget.onOpenUpgrade),
           _MenuAction('💧', 'Water Reminders',
               onTap: () => widget.onOpenTab?.call(3)),
           _MenuAction('🔒', 'Privacy', onTap: () => _showPrivacy(context)),
@@ -1593,6 +1570,207 @@ class _MenuAction {
   final bool danger;
   final String? toggleKey;
   final String? subtitle;
+}
+
+/// Edit profile: photo, the single public name (unique), and a short status.
+class _EditProfilePage extends StatefulWidget {
+  const _EditProfilePage({
+    required this.api,
+    required this.signInName,
+    required this.signInPhotoUrl,
+    required this.name,
+    required this.status,
+    required this.photoUrl,
+    required this.onChangePhoto,
+  });
+
+  final ApiService api;
+  final String signInName;
+  final String? signInPhotoUrl;
+  final String name;
+  final String status;
+
+  /// Current photo, read live so the preview follows a change.
+  final String? Function() photoUrl;
+  final Future<void> Function(BuildContext) onChangePhoto;
+
+  @override
+  State<_EditProfilePage> createState() => _EditProfilePageState();
+}
+
+class _EditProfilePageState extends State<_EditProfilePage> {
+  late final _name = TextEditingController(text: widget.name);
+  late final _status = TextEditingController(text: widget.status);
+  String? _nameError;
+  bool _busy = false;
+
+  static const maxName = 40;
+  static const maxStatus = 100;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _status.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _name.text.trim();
+    final status = _status.text.trim();
+    if (name.length < 2) {
+      setState(() => _nameError = 'Use at least 2 characters.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _nameError = null;
+    });
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      // Friendlier message before writing; the server enforces it anyway.
+      final renamed = name.toLowerCase() != widget.name.toLowerCase();
+      if (renamed && !await widget.api.isUsernameAvailable(name)) {
+        setState(() {
+          _busy = false;
+          _nameError = 'That name is taken — try another.';
+        });
+        return;
+      }
+      await widget.api.upsertProfile(
+        widget.signInName,
+        photoUrl: widget.signInPhotoUrl,
+        username: name,
+        status: status,
+        strict: true,
+      );
+      if (mounted) Navigator.pop(context, (name: name, status: status));
+    } on UsernameTaken {
+      setState(() {
+        _busy = false;
+        _nameError = 'That name is taken — try another.';
+      });
+    } catch (_) {
+      setState(() => _busy = false);
+      messenger.showSnackBar(
+          const SnackBar(content: Text("Couldn't save. Try again.")));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+    final photo = widget.photoUrl();
+    final initial = _name.text.trim().isEmpty
+        ? '?'
+        : _name.text.trim()[0].toUpperCase();
+
+    InputDecoration field(String label, String hint, {String? error}) =>
+        InputDecoration(
+          labelText: label,
+          hintText: hint,
+          errorText: error,
+          labelStyle: TextStyle(color: c.textMuted),
+          hintStyle: TextStyle(color: c.textMuted.withValues(alpha: 0.6)),
+          counterStyle: TextStyle(color: c.textMuted, fontSize: 10),
+          focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: c.accent)),
+        );
+
+    return Scaffold(
+      backgroundColor: c.bg,
+      appBar: AppBar(
+        backgroundColor: c.surface,
+        surfaceTintColor: Colors.transparent,
+        iconTheme: IconThemeData(color: c.textPrimary),
+        title: Text('Edit profile',
+            style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+        actions: [
+          TextButton(
+            key: const ValueKey('save-profile'),
+            onPressed: _busy ? null : _save,
+            child: Text(_busy ? 'Saving…' : 'Save',
+                style: AppTheme.display(
+                    color: c.accent, fontSize: 15, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+        children: [
+          Center(
+            child: GestureDetector(
+              onTap: () async {
+                await widget.onChangePhoto(context);
+                if (mounted) setState(() {}); // pick up the new photo
+              },
+              child: Column(
+                children: [
+                  Container(
+                    width: 96,
+                    height: 96,
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: c.accentSoft,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: c.accent, width: 3),
+                    ),
+                    child: photo != null
+                        ? Image.network(photo,
+                            width: 96,
+                            height: 96,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Text(initial,
+                                style: AppTheme.display(
+                                    color: c.accent, fontSize: 36)))
+                        : Text(initial,
+                            style:
+                                AppTheme.display(color: c.accent, fontSize: 36)),
+                  ),
+                  const SizedBox(height: 10),
+                  Text('Change photo',
+                      style: AppTheme.display(
+                          color: c.accent,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+          TextField(
+            key: const ValueKey('profile-name'),
+            controller: _name,
+            maxLength: maxName,
+            textCapitalization: TextCapitalization.none,
+            style: TextStyle(color: c.textPrimary, fontSize: 16),
+            onChanged: (_) => setState(() => _nameError = null),
+            decoration: field('Name', 'e.g. devil', error: _nameError),
+          ),
+          Text(
+            'Your one name in Movara — unique, and shown on the leaderboard.',
+            style: TextStyle(color: c.textMuted, fontSize: 11),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            key: const ValueKey('profile-status'),
+            controller: _status,
+            maxLength: maxStatus,
+            maxLines: 2,
+            minLines: 1,
+            textCapitalization: TextCapitalization.sentences,
+            style: TextStyle(color: c.textPrimary, fontSize: 15),
+            decoration:
+                field('Status', 'e.g. Training for my first 10K 🏃'),
+          ),
+          Text(
+            'Shown under your name and on the leaderboard. Leave blank to hide.',
+            style: TextStyle(color: c.textMuted, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Morning and evening time pickers for Gym Motivation.

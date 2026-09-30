@@ -245,3 +245,32 @@ class TestProfilePhoto:
     def test_upload_requires_sign_in(self):
         r = client.put("/api/profile/photo", content=JPEG)
         assert r.status_code == 401
+
+
+class TestProfileStatus:
+    def test_status_saves_shows_on_board_and_clears(self, local_signing_key):
+        h = headers_for(local_signing_key, "alice")
+        client.put(
+            "/api/profile",
+            json={"displayName": "Alice", "username": "devil", "status": "Training for a 10K"},
+            headers=h,
+        )
+        me = client.get("/api/profile/me", headers=h).json()
+        assert me["username"] == "devil"
+        assert me["status"] == "Training for a 10K"
+        board = client.get("/api/leaderboard", headers=h).json()
+        assert board[0]["displayName"] == "devil"
+        assert board[0]["status"] == "Training for a 10K"
+
+        # The sign-in upsert omits status; it must not wipe it.
+        client.put("/api/profile", json={"displayName": "Alice"}, headers=h)
+        assert client.get("/api/profile/me", headers=h).json()["status"] == "Training for a 10K"
+
+        # An empty string clears it.
+        client.put("/api/profile", json={"displayName": "Alice", "status": "  "}, headers=h)
+        assert client.get("/api/profile/me", headers=h).json()["status"] is None
+
+    def test_status_is_capped_at_100_chars(self, local_signing_key):
+        h = headers_for(local_signing_key, "alice")
+        client.put("/api/profile", json={"displayName": "A", "status": "x" * 300}, headers=h)
+        assert len(client.get("/api/profile/me", headers=h).json()["status"]) == 100
