@@ -44,6 +44,9 @@ flutter build ios --release \
 # installs nowhere -- while still exiting 0, so this has to be checked by hand.
 DEVICE="${1:-}"
 if [ -z "$DEVICE" ]; then
+  DEVICE=$(xcrun devicectl list devices 2>/dev/null | awk '/available/ {print $3}' | head -n 1)
+fi
+if [ -z "$DEVICE" ]; then
   DEVICE=$(flutter devices --machine 2>/dev/null \
     | python3 -c "import json,sys; d=[x['id'] for x in json.load(sys.stdin) if x.get('targetPlatform','').startswith('ios') and not x.get('emulator')]; print(d[0] if len(d)==1 else '')")
 fi
