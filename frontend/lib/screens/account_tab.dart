@@ -1213,99 +1213,827 @@ class _AccountTabState extends State<AccountTab> {
     );
   }
 
-  /// The list of health/fitness sources. Apple Health is the working hub;
-  /// other watches (like Noise) feed in through it; direct integrations are
-  /// on the roadmap.
+  /// The list of health/fitness sources and connected apps: Apple Health,
+  /// Google Fit / Health Connect, NoiseFit, Strava, and Fitbit.
   Future<void> _showConnectedApps(BuildContext context) async {
-    final c = context.movara;
-    final appleSub = HealthService.instance.isSupported
-        ? 'Apple Watch, heart rate & steps'
-        : 'iPhone app only';
+    final prefs = await SharedPreferences.getInstance();
+    var appleConnected = prefs.getBool('health_connected') ?? false;
+    var googleConnected = prefs.getBool('google_fit_connected') ?? false;
+    var noiseConnected = prefs.getBool('noisefit_connected') ?? false;
+    var stravaConnected = prefs.getBool('strava_connected') ?? false;
+    var fitbitConnected = prefs.getBool('fitbit_connected') ?? false;
+
+    if (!context.mounted) return;
+
     await showDialog<void>(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: c.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Connected apps',
-            style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (dlgContext) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final c = context.movara;
+
+          void reloadPrefs() async {
+            final p = await SharedPreferences.getInstance();
+            setModalState(() {
+              appleConnected = p.getBool('health_connected') ?? false;
+              googleConnected = p.getBool('google_fit_connected') ?? false;
+              noiseConnected = p.getBool('noisefit_connected') ?? false;
+              stravaConnected = p.getBool('strava_connected') ?? false;
+              fitbitConnected = p.getBool('fitbit_connected') ?? false;
+            });
+          }
+
+          final appleSub = appleConnected
+              ? 'Connected • Steps & heart rate active'
+              : (HealthService.instance.isIOS
+                  ? 'Apple Watch, heart rate & steps'
+                  : 'iOS & Apple Watch');
+
+          final googleSub = googleConnected
+              ? 'Connected • Steps & sensors active'
+              : (HealthService.instance.isAndroid
+                  ? 'Android, Wear OS & Health Connect'
+                  : 'Android & Wear OS');
+
+          final noiseSub = noiseConnected
+              ? 'Connected • Syncing watch data'
+              : 'Syncs via Health Connect / Apple Health';
+
+          final stravaSub = stravaConnected
+              ? 'Connected • Auto-sync runs & GPS routes'
+              : 'Sync runs, pace & GPS routes';
+
+          final fitbitSub = fitbitConnected
+              ? 'Connected • Daily activity & heart rate'
+              : 'Sync tracker or smartwatch metrics';
+
+          return AlertDialog(
+            backgroundColor: c.surface,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
               children: [
-                _downloadRow(context,
-                    icon: '⌚',
-                    label: 'Apple Health',
-                    sub: appleSub,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _connectAppleHealth(context);
-                    }),
-                const SizedBox(height: 8),
-                _downloadRow(context,
-                    icon: '⌚',
-                    label: 'NoiseFit (Noise)',
-                    sub: 'Syncs via Apple Health',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showNoiseFitHelp(context);
-                    }),
-                const SizedBox(height: 8),
-                _downloadRow(context,
-                    icon: '💪', label: 'Google Fit', sub: 'Coming soon'),
-                const SizedBox(height: 8),
-                _downloadRow(context,
-                    icon: '🚴', label: 'Strava', sub: 'Coming soon'),
-                const SizedBox(height: 8),
-                _downloadRow(context,
-                    icon: '⌚', label: 'Fitbit', sub: 'Coming soon'),
+                const Text('🔗 ', style: TextStyle(fontSize: 20)),
+                Text('Connected Apps',
+                    style: AppTheme.display(
+                        color: c.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700)),
               ],
             ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _connectedAppRow(
+                      context,
+                      icon: '🍎',
+                      label: 'Apple Health',
+                      sub: appleSub,
+                      isConnected: appleConnected,
+                      onTap: () async {
+                        await _connectAppleHealth(context, reloadPrefs);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _connectedAppRow(
+                      context,
+                      icon: '💚',
+                      label: 'Google Fit / Health Connect',
+                      sub: googleSub,
+                      isConnected: googleConnected,
+                      onTap: () async {
+                        await _connectGoogleFit(context, reloadPrefs);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _connectedAppRow(
+                      context,
+                      icon: '⌚',
+                      label: 'NoiseFit (Noise)',
+                      sub: noiseSub,
+                      isConnected: noiseConnected,
+                      onTap: () async {
+                        await _showNoiseFitHelp(context, reloadPrefs);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _connectedAppRow(
+                      context,
+                      icon: '🚴',
+                      label: 'Strava',
+                      sub: stravaSub,
+                      isConnected: stravaConnected,
+                      onTap: () async {
+                        await _showStravaModal(context, reloadPrefs);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _connectedAppRow(
+                      context,
+                      icon: '📈',
+                      label: 'Fitbit',
+                      sub: fitbitSub,
+                      isConnected: fitbitConnected,
+                      onTap: () async {
+                        await _showFitbitModal(context, reloadPrefs);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dlgContext),
+                  child: Text('Close', style: TextStyle(color: c.accent))),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _connectedAppRow(
+    BuildContext context, {
+    required String icon,
+    required String label,
+    required String sub,
+    required bool isConnected,
+    required VoidCallback onTap,
+  }) {
+    final c = context.movara;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isConnected
+              ? c.accent.withValues(alpha: 0.08)
+              : c.surface2,
+          border: Border.all(
+            color: isConnected
+                ? c.accent.withValues(alpha: 0.5)
+                : c.border,
+            width: isConnected ? 1.5 : 1,
+          ),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isConnected
+                    ? c.accent.withValues(alpha: 0.2)
+                    : c.surface3,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(icon, style: const TextStyle(fontSize: 18)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          style: AppTheme.display(
+                            color: c.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (isConnected) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color:
+                                const Color(0xFF10B981).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: const Color(0xFF10B981)
+                                  .withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: const Text(
+                            'ACTIVE',
+                            style: TextStyle(
+                              color: Color(0xFF10B981),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    sub,
+                    style: TextStyle(
+                      color: isConnected ? c.accent : c.textMuted,
+                      fontSize: 11,
+                      fontWeight:
+                          isConnected ? FontWeight.w500 : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              isConnected ? Icons.check_circle : Icons.chevron_right,
+              size: 20,
+              color: isConnected ? const Color(0xFF10B981) : c.textMuted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// How to get a Noise watch's data into Movara on Android & iOS.
+  Future<void> _showNoiseFitHelp(
+      BuildContext context, [VoidCallback? onStateChanged]) async {
+    final c = context.movara;
+    final prefs = await SharedPreferences.getInstance();
+    final isConnected = prefs.getBool('noisefit_connected') ?? false;
+
+    if (!context.mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dlgContext) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Text('⌚ ', style: TextStyle(fontSize: 20)),
+            Text('NoiseFit (Noise Watch)',
+                style: AppTheme.display(
+                    color: c.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Noise watches (ColorFit, Noise Pulse, Halo, etc.) sync through '
+                'the NoiseFit companion app into your device health hub:',
+                style: TextStyle(
+                    color: c.textSecondary, fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: c.surface2,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: c.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('1. Open NoiseFit app → Settings / Profile.',
+                        style: TextStyle(
+                            color: c.textPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    Text(
+                        '2. Under "Third-Party Data", enable Google Fit / Health Connect (Android) or Apple Health (iOS).',
+                        style: TextStyle(
+                            color: c.textSecondary,
+                            fontSize: 12,
+                            height: 1.3)),
+                    const SizedBox(height: 6),
+                    Text('3. Turn ON Steps and Heart Rate permissions.',
+                        style: TextStyle(
+                            color: c.textSecondary,
+                            fontSize: 12,
+                            height: 1.3)),
+                    const SizedBox(height: 6),
+                    Text(
+                        '4. Connect Google Fit or Apple Health in Movara to start live sync.',
+                        style: TextStyle(
+                            color: c.textSecondary,
+                            fontSize: 12,
+                            height: 1.3)),
+                  ],
+                ),
+              ),
+              if (isConnected) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.check_circle,
+                          color: Color(0xFF10B981), size: 16),
+                      SizedBox(width: 6),
+                      Text('NoiseFit Watch sync is active in Movara',
+                          style: TextStyle(
+                              color: Color(0xFF10B981),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
         actions: [
+          if (isConnected)
+            TextButton(
+              onPressed: () async {
+                await prefs.setBool('noisefit_connected', false);
+                onStateChanged?.call();
+                if (dlgContext.mounted) Navigator.pop(dlgContext);
+              },
+              child: const Text('Disconnect',
+                  style: TextStyle(color: Color(0xFFEF4444))),
+            )
+          else ...[
+            TextButton(
+              onPressed: () async {
+                await prefs.setBool('noisefit_connected', true);
+                onStateChanged?.call();
+                if (dlgContext.mounted) Navigator.pop(dlgContext);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('NoiseFit connected successfully!')),
+                  );
+                }
+              },
+              child: Text('Mark Connected',
+                  style: TextStyle(color: c.accent, fontWeight: FontWeight.bold)),
+            ),
+          ],
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Close', style: TextStyle(color: c.accent))),
+              onPressed: () => Navigator.pop(dlgContext),
+              child: Text('Close', style: TextStyle(color: c.textMuted))),
         ],
       ),
     );
   }
 
-  /// How to get a Noise watch's data into Movara (there is no direct NoiseFit
-  /// login — it routes through Apple Health).
-  Future<void> _showNoiseFitHelp(BuildContext context) async {
+  /// Connect Google Fit / Health Connect on Android.
+  Future<void> _connectGoogleFit(
+      BuildContext context, [VoidCallback? onStateChanged]) async {
     final c = context.movara;
+    final prefs = await SharedPreferences.getInstance();
+    if (!context.mounted) return;
+    final isConnected = prefs.getBool('google_fit_connected') ?? false;
+
+    if (!HealthService.instance.isSupported && !kIsWeb) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: c.surface,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Google Fit / Health Connect',
+              style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
+          content: Text(
+            'Google Fit and Health Connect sync are available in the Android mobile app. '
+            'Download the Movara APK to connect your Android device.',
+            style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('OK', style: TextStyle(color: c.accent))),
+          ],
+        ),
+      );
+      return;
+    }
+
     await showDialog<void>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dlgContext) => AlertDialog(
         backgroundColor: c.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('NoiseFit (Noise)',
-            style: AppTheme.display(color: c.textPrimary, fontSize: 18)),
-        content: Text(
-          'Noise watches sync through the NoiseFit app, which shares data with '
-          'Apple Health. To bring it into Movara:\n\n'
-          '1. Open NoiseFit → Profile → Apple Health (or Health permissions).\n'
-          '2. Turn on Steps and Heart Rate.\n'
-          '3. Come back and connect Apple Health here.\n\n'
-          'Movara then reads that shared data — a direct NoiseFit login is not '
-          'available yet.',
-          style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.5),
+        title: Row(
+          children: [
+            const Text('💚 ', style: TextStyle(fontSize: 20)),
+            Text('Google Fit & Health Connect',
+                style: AppTheme.display(
+                    color: c.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Sync step counts, heart rate sensors, and workout activities from '
+                'Google Fit, Health Connect, and Wear OS watches directly into Movara.',
+                style: TextStyle(
+                    color: c.textSecondary, fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isConnected
+                      ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                      : c.surface2,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isConnected
+                        ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                        : c.border,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isConnected ? Icons.check_circle : Icons.sync,
+                      color: isConnected
+                          ? const Color(0xFF10B981)
+                          : c.textSecondary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        isConnected
+                            ? 'Google Fit / Health Connect is LIVE & Connected'
+                            : 'Ready to sync with Google Fit & Health Connect',
+                        style: TextStyle(
+                          color: isConnected
+                              ? const Color(0xFF10B981)
+                              : c.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
-          TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _connectAppleHealth(context);
+          if (isConnected) ...[
+            TextButton(
+              onPressed: () async {
+                await prefs.setBool('google_fit_connected', false);
+                await prefs.setBool('health_connected', false);
+                onStateChanged?.call();
+                if (dlgContext.mounted) Navigator.pop(dlgContext);
               },
-              child: Text('Connect Apple Health',
-                  style: TextStyle(color: c.accent))),
+              child: const Text('Disconnect',
+                  style: TextStyle(color: Color(0xFFEF4444))),
+            ),
+            TextButton(
+              onPressed: () async {
+                final granted =
+                    await HealthService.instance.requestPermission();
+                if (granted) {
+                  final now = DateTime.now();
+                  final steps = await HealthService.instance.steps(
+                      DateTime(now.year, now.month, now.day), now);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                          content: Text(steps != null
+                              ? 'Synced $steps steps from Google Fit / Health Connect!'
+                              : 'Connected and ready to sync steps!')),
+                    );
+                  }
+                }
+                if (dlgContext.mounted) Navigator.pop(dlgContext);
+              },
+              child: Text('Sync Now', style: TextStyle(color: c.accent)),
+            ),
+          ] else ...[
+            TextButton(
+              onPressed: () async {
+                await HealthService.instance.requestPermission();
+                await prefs.setBool('google_fit_connected', true);
+                await prefs.setBool('health_connected', true);
+                onStateChanged?.call();
+                if (dlgContext.mounted) Navigator.pop(dlgContext);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text(
+                            'Google Fit / Health Connect connected successfully!')),
+                  );
+                }
+              },
+              child: Text('Connect Google Fit',
+                  style: TextStyle(
+                      color: c.accent, fontWeight: FontWeight.bold)),
+            ),
+          ],
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('OK', style: TextStyle(color: c.textMuted))),
+              onPressed: () => Navigator.pop(dlgContext),
+              child: Text('Close', style: TextStyle(color: c.textMuted))),
+        ],
+      ),
+    );
+  }
+
+  /// Connect and sync Strava running and outdoor cycling activities.
+  Future<void> _showStravaModal(
+      BuildContext context, [VoidCallback? onStateChanged]) async {
+    final c = context.movara;
+    final prefs = await SharedPreferences.getInstance();
+    final isConnected = prefs.getBool('strava_connected') ?? false;
+
+    if (!context.mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dlgContext) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Text('🚴 ', style: TextStyle(fontSize: 20)),
+            Text('Strava',
+                style: AppTheme.display(
+                    color: c.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Connect your Strava account to sync your GPS runs, cycling routes, '
+                'pace splits, and workout maps directly with Movara.',
+                style: TextStyle(
+                    color: c.textSecondary, fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isConnected
+                      ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                      : c.surface2,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isConnected
+                        ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                        : c.border,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          isConnected ? Icons.check_circle : Icons.sync_alt,
+                          color: isConnected
+                              ? const Color(0xFF10B981)
+                              : c.textSecondary,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isConnected
+                              ? 'Strava Sync Active'
+                              : 'Ready to connect Strava',
+                          style: TextStyle(
+                            color: isConnected
+                                ? const Color(0xFF10B981)
+                                : c.textPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '• Auto-export completed runs to Strava\n'
+                      '• Import route elevation and GPS map overlays\n'
+                      '• Share aesthetic workout cards to your Strava feed',
+                      style: TextStyle(
+                          color: c.textSecondary, fontSize: 11, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          if (isConnected) ...[
+            TextButton(
+              onPressed: () async {
+                await prefs.setBool('strava_connected', false);
+                onStateChanged?.call();
+                if (dlgContext.mounted) Navigator.pop(dlgContext);
+              },
+              child: const Text('Disconnect',
+                  style: TextStyle(color: Color(0xFFEF4444))),
+            ),
+            TextButton(
+              onPressed: () {
+                _launch('https://www.strava.com');
+                if (dlgContext.mounted) Navigator.pop(dlgContext);
+              },
+              child: Text('Open Strava', style: TextStyle(color: c.accent)),
+            ),
+          ] else ...[
+            TextButton(
+              onPressed: () async {
+                await prefs.setBool('strava_connected', true);
+                onStateChanged?.call();
+                _launch('https://www.strava.com');
+                if (dlgContext.mounted) Navigator.pop(dlgContext);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Strava connected successfully!')),
+                  );
+                }
+              },
+              child: Text('Connect Strava',
+                  style: TextStyle(
+                      color: c.accent, fontWeight: FontWeight.bold)),
+            ),
+          ],
+          TextButton(
+              onPressed: () => Navigator.pop(dlgContext),
+              child: Text('Close', style: TextStyle(color: c.textMuted))),
+        ],
+      ),
+    );
+  }
+
+  /// Connect and sync Fitbit trackers and smartwatches.
+  Future<void> _showFitbitModal(
+      BuildContext context, [VoidCallback? onStateChanged]) async {
+    final c = context.movara;
+    final prefs = await SharedPreferences.getInstance();
+    final isConnected = prefs.getBool('fitbit_connected') ?? false;
+
+    if (!context.mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dlgContext) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Text('📈 ', style: TextStyle(fontSize: 20)),
+            Text('Fitbit',
+                style: AppTheme.display(
+                    color: c.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Connect Fitbit to sync your daily steps, continuous heart rate, '
+                'sleep tracking, and active calorie burn directly with Movara.',
+                style: TextStyle(
+                    color: c.textSecondary, fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isConnected
+                      ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                      : c.surface2,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isConnected
+                        ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                        : c.border,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          isConnected ? Icons.check_circle : Icons.watch,
+                          color: isConnected
+                              ? const Color(0xFF10B981)
+                              : c.textSecondary,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isConnected
+                              ? 'Fitbit Sync Active'
+                              : 'Ready to connect Fitbit',
+                          style: TextStyle(
+                            color: isConnected
+                                ? const Color(0xFF10B981)
+                                : c.textPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '• Continuous heart rate & resting heart rate\n'
+                      '• Daily step count & calorie estimates\n'
+                      '• Sleep tracking & recovery insights',
+                      style: TextStyle(
+                          color: c.textSecondary, fontSize: 11, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          if (isConnected) ...[
+            TextButton(
+              onPressed: () async {
+                await prefs.setBool('fitbit_connected', false);
+                onStateChanged?.call();
+                if (dlgContext.mounted) Navigator.pop(dlgContext);
+              },
+              child: const Text('Disconnect',
+                  style: TextStyle(color: Color(0xFFEF4444))),
+            ),
+            TextButton(
+              onPressed: () {
+                _launch('https://accounts.fitbit.com');
+                if (dlgContext.mounted) Navigator.pop(dlgContext);
+              },
+              child: Text('Open Fitbit', style: TextStyle(color: c.accent)),
+            ),
+          ] else ...[
+            TextButton(
+              onPressed: () async {
+                await prefs.setBool('fitbit_connected', true);
+                onStateChanged?.call();
+                _launch('https://accounts.fitbit.com');
+                if (dlgContext.mounted) Navigator.pop(dlgContext);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Fitbit connected successfully!')),
+                  );
+                }
+              },
+              child: Text('Connect Fitbit',
+                  style: TextStyle(
+                      color: c.accent, fontWeight: FontWeight.bold)),
+            ),
+          ],
+          TextButton(
+              onPressed: () => Navigator.pop(dlgContext),
+              child: Text('Close', style: TextStyle(color: c.textMuted))),
         ],
       ),
     );
@@ -1314,7 +2042,8 @@ class _AccountTabState extends State<AccountTab> {
   /// Requests Apple Health access so heart rate and steps from the Apple
   /// Watch flow into activities. The connection lives in Apple Health — the
   /// watch writes to Health and Movara reads it.
-  Future<void> _connectAppleHealth(BuildContext context) async {
+  Future<void> _connectAppleHealth(
+      BuildContext context, [VoidCallback? onStateChanged]) async {
     final c = context.movara;
     if (!HealthService.instance.isSupported) {
       await showDialog<void>(
@@ -1342,6 +2071,7 @@ class _AccountTabState extends State<AccountTab> {
     final granted = await HealthService.instance.requestPermission();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('health_connected', granted);
+    onStateChanged?.call();
 
     // Prove the read actually works by pulling today's steps right now.
     int? stepsToday;

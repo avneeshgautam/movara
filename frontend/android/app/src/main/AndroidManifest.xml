@@ -9,6 +9,11 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
     <!-- Re-queue scheduled notifications after the phone restarts. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Health Connect / Step & Heart Rate Sensors for Android -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
+    <uses-permission android:name="android.permission.BODY_SENSORS"/>
+    <uses-permission android:name="android.permission.health.READ_STEPS"/>
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
 
     <application
         android:label="Movara"
