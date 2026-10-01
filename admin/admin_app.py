@@ -54,16 +54,27 @@ async def local_only(request: Request, call_next):
 _SERVICE_ACCOUNT = ROOT / "service-account.json"
 
 
-def _firebase_users() -> dict[str, dict]:
-    if not _SERVICE_ACCOUNT.exists():
-        return {}
+def _firebase_app():
+    """Return the default firebase_admin App, initialising it once."""
     try:
         import firebase_admin
-        from firebase_admin import auth, credentials
+        from firebase_admin import credentials
     except ImportError:
-        return {}
+        return None
+    if not _SERVICE_ACCOUNT.exists():
+        return None
     if not firebase_admin._apps:
         firebase_admin.initialize_app(credentials.Certificate(str(_SERVICE_ACCOUNT)))
+    return firebase_admin.get_app()
+
+
+def _firebase_users() -> dict[str, dict]:
+    if _firebase_app() is None:
+        return {}
+    try:
+        from firebase_admin import auth
+    except ImportError:
+        return {}
     out: dict[str, dict] = {}
     page = auth.list_users()
     while page:
@@ -86,16 +97,12 @@ def _fcm_send(tokens: list[str], title: str, body: str) -> None:
     service account. Silently skips when firebase-admin isn't installed or
     the service-account file is missing (falls back to polling only).
     """
-    if not tokens or not _SERVICE_ACCOUNT.exists():
+    if not tokens or _firebase_app() is None:
         return
     try:
-        import firebase_admin
-        from firebase_admin import credentials, messaging
+        from firebase_admin import messaging
     except ImportError:
         return
-
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(credentials.Certificate(str(_SERVICE_ACCOUNT)))
 
     # FCM caps at 500 tokens per call.
     for i in range(0, len(tokens), 500):
