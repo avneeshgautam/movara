@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/reminder_scheduler.dart';
 import '../services/chat_controller.dart';
+import '../services/fcm_service.dart';
 import '../services/goal_store.dart';
 import '../services/habit_store.dart';
 import '../services/inbox.dart';
@@ -74,6 +75,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   late final ChatController _chat = ChatController(api: _api);
   late final RunStore _runs =
       RunStore(uploader: _api.uploadRun, downloader: _api.fetchRuns);
+  late final FcmService _fcm = FcmService(_api);
   MovaraTab _tab = MovaraTab.home;
 
   /// The user's chosen public name, once loaded; the greeting uses it so the
@@ -102,6 +104,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         photoUrl: widget.auth.currentUser?.photoURL);
     WidgetsBinding.instance.addObserver(this);
     _checkInbox();
+    // Start FCM: request permission, obtain token, send it to backend.
+    _fcm.init();
   }
 
   @override
@@ -181,6 +185,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _habits.dispose();
     _goals.dispose();
     _chat.dispose();
+    _fcm.dispose();
     _api.dispose();
     super.dispose();
   }

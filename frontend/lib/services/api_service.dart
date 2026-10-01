@@ -211,6 +211,24 @@ class ApiService {
     ];
   }
 
+  /// Registers (or refreshes) the device's FCM token with the backend so the
+  /// admin can send push notifications that appear on the lock screen/banner.
+  /// Best-effort: failures are swallowed and retried on the next app launch.
+  Future<void> registerFcmToken(String token) async {
+    try {
+      final response = await _client.patch(
+        _uri('/notifications/fcm-token'),
+        headers: await _headers(json: true),
+        body: jsonEncode({'token': token}),
+      );
+      if (response.statusCode != 204) {
+        throw ApiException(response.statusCode, response.body);
+      }
+    } catch (_) {
+      // Non-fatal: polling still works as a fallback.
+    }
+  }
+
   /// The server sends naive UTC timestamps; parse them as UTC, not local.
   static DateTime _utc(String iso) {
     final hasZone = iso.endsWith('Z') || RegExp(r'[+-]\d\d:\d\d$').hasMatch(iso);

@@ -79,6 +79,54 @@ def _firebase_users() -> dict[str, dict]:
     return out
 
 
+def _fcm_send(tokens: list[str], title: str, body: str) -> None:
+    """Send a Firebase Cloud Messaging push to every token in the list.
+
+    Uses the FCM HTTP v1 API with an OAuth2 bearer token derived from the
+    service account. Silently skips when firebase-admin isn't installed or
+    the service-account file is missing (falls back to polling only).
+    """
+    if not tokens or not _SERVICE_ACCOUNT.exists():
+        return
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, messaging
+    except ImportError:
+        return
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(credentials.Certificate(str(_SERVICE_ACCOUNT)))
+
+    # FCM caps at 500 tokens per call.
+    for i in range(0, len(tokens), 500):
+        batch = tokens[i : i + 500]
+        message = messaging.MulticastMessage(
+            notification=messaging.Notification(title=title, body=body),
+            android=messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    sound="default",
+                    priority="high",
+                    default_vibrate_timings=True,
+                ),
+            ),
+            apns=messaging.APNSConfig(
+                payload=messaging.APNSPayload(
+                    aps=messaging.Aps(
+                        sound="default",
+                        badge=1,
+                    )
+                )
+            ),
+            tokens=batch,
+        )
+        try:
+            messaging.send_each_for_multicast(message)
+        except Exception as exc:  # pragma: no cover
+            import logging
+            logging.getLogger(__name__).warning("FCM send failed: %s", exc)
+
+
 def _ms(ms: int | None) -> datetime | None:
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).replace(tzinfo=None) if ms else None
 
@@ -281,6 +329,17 @@ def notify(req: NotifyRequest) -> dict:
         )
         s.add(n)
         s.commit()
+
+        # ── FCM push ────────────────────────────────────────────────────────
+        # Collect device tokens: one specific user or every registered device.
+        if req.userId:
+            profile = s.get(db.Profile, req.userId)
+            tokens = [profile.fcm_token] if profile and profile.fcm_token else []
+        else:
+            profiles = s.scalars(select(db.Profile)).all()
+            tokens = [p.fcm_token for p in profiles if p.fcm_token]
+
+        _fcm_send(tokens, n.title, n.body)
         return {"id": n.id, "sentAt": n.created_at.isoformat()}
 
 
