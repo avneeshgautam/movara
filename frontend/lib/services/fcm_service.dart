@@ -27,8 +27,10 @@ const _kDetails = NotificationDetails(
 /// *terminated*. Must be a top-level function (not a closure or method).
 @pragma('vm:entry-point')
 Future<void> _onBackgroundMessage(RemoteMessage message) async {
-  // flutter_local_notifications shows the notification on Android when the
-  // app is backgrounded (iOS handles it natively via APNs).
+  // Android needs a local notification here. iOS displays notification
+  // payloads through APNs while backgrounded, so showing another local copy
+  // would duplicate the alert.
+  if (!Platform.isAndroid) return;
   final plugin = FlutterLocalNotificationsPlugin();
   await plugin.initialize(
     settings: const InitializationSettings(
@@ -124,7 +126,21 @@ class FcmService {
     _fgSub = FirebaseMessaging.onMessage.listen(_showForeground);
 
     // ── Token registration ──────────────────────────────────────────────────
-    final token = await _messaging.getToken();
+    // APNs must issue its token before Firebase can create an iOS FCM token.
+    // The first launch can race that registration, so wait briefly and retry
+    // instead of abandoning push setup for the lifetime of this app session.
+    String? token;
+    for (var attempt = 0; attempt < 5 && token == null; attempt++) {
+      try {
+        if (Platform.isIOS && await _messaging.getAPNSToken() == null) {
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+          continue;
+        }
+        token = await _messaging.getToken();
+      } catch (_) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
     if (token != null) await _registerToken(token);
 
     _tokenSub = _messaging.onTokenRefresh.listen(_registerToken);

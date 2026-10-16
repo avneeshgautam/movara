@@ -271,7 +271,10 @@ $('#send').onclick = async () => {
     });
     if (!r.ok) throw new Error(await r.text());
     $('#title').value = ''; $('#body').value = '';
-    toast('Sent ✓');
+    const pushMessage = r.pushAvailable
+      ? `Push sent to ${r.pushSent}${r.pushFailed ? `; ${r.pushFailed} failed` : ''}.`
+      : 'Saved for in-app delivery; no push token was available.';
+    toast(pushMessage);
     loadSent(); loadOverview();
   } catch (e) { toast('Failed: ' + e.message); }
   finally { $('#send').disabled = false; }

@@ -12,5 +12,5 @@ PORT="${PORT:-8090}"
 echo "==> Movara admin on http://127.0.0.1:$PORT  (Ctrl+C to stop)"
 ( sleep 2 && open "http://127.0.0.1:$PORT" >/dev/null 2>&1 || true ) &
 exec env \
-  DATABASE_URL='postgresql://postgres.gqhqytwkcwcvoqrqzhik:Movara%40%232929@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres' \
+  DATABASE_URL="${DATABASE_URL:?Set DATABASE_URL to the live Supabase connection string before starting the admin portal}" \
   "$PY" -m uvicorn admin_app:app --app-dir . --host 127.0.0.1 --port "$PORT"

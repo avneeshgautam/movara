@@ -90,19 +90,26 @@ def _firebase_users() -> dict[str, dict]:
     return out
 
 
-def _fcm_send(tokens: list[str], title: str, body: str) -> None:
+def _fcm_send(tokens: list[str], title: str, body: str) -> dict[str, int | bool]:
     """Send a Firebase Cloud Messaging push to every token in the list.
 
     Uses the FCM HTTP v1 API with an OAuth2 bearer token derived from the
     service account. Silently skips when firebase-admin isn't installed or
     the service-account file is missing (falls back to polling only).
     """
+    result: dict[str, int | bool] = {
+        "pushAvailable": False,
+        "pushSent": 0,
+        "pushFailed": 0,
+    }
     if not tokens or _firebase_app() is None:
-        return
+        return result
     try:
         from firebase_admin import messaging
     except ImportError:
-        return
+        return result
+
+    result["pushAvailable"] = True
 
     # FCM caps at 500 tokens per call.
     for i in range(0, len(tokens), 500):
@@ -128,10 +135,14 @@ def _fcm_send(tokens: list[str], title: str, body: str) -> None:
             tokens=batch,
         )
         try:
-            messaging.send_each_for_multicast(message)
+            response = messaging.send_each_for_multicast(message)
+            result["pushSent"] += response.success_count
+            result["pushFailed"] += response.failure_count
         except Exception as exc:  # pragma: no cover
             import logging
             logging.getLogger(__name__).warning("FCM send failed: %s", exc)
+            result["pushFailed"] += len(batch)
+    return result
 
 
 def _ms(ms: int | None) -> datetime | None:
@@ -346,8 +357,8 @@ def notify(req: NotifyRequest) -> dict:
             profiles = s.scalars(select(db.Profile)).all()
             tokens = [p.fcm_token for p in profiles if p.fcm_token]
 
-        _fcm_send(tokens, n.title, n.body)
-        return {"id": n.id, "sentAt": n.created_at.isoformat()}
+        push = _fcm_send(tokens, n.title, n.body)
+        return {"id": n.id, "sentAt": n.created_at.isoformat(), **push}
 
 
 @app.get("/api/notifications")
