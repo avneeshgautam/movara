@@ -54,16 +54,27 @@ async def local_only(request: Request, call_next):
 _SERVICE_ACCOUNT = ROOT / "service-account.json"
 
 
-def _firebase_users() -> dict[str, dict]:
-    if not _SERVICE_ACCOUNT.exists():
-        return {}
+def _firebase_app():
+    """Return the default firebase_admin App, initialising it once."""
     try:
         import firebase_admin
-        from firebase_admin import auth, credentials
+        from firebase_admin import credentials
     except ImportError:
-        return {}
+        return None
+    if not _SERVICE_ACCOUNT.exists():
+        return None
     if not firebase_admin._apps:
         firebase_admin.initialize_app(credentials.Certificate(str(_SERVICE_ACCOUNT)))
+    return firebase_admin.get_app()
+
+
+def _firebase_users() -> dict[str, dict]:
+    if _firebase_app() is None:
+        return {}
+    try:
+        from firebase_admin import auth
+    except ImportError:
+        return {}
     out: dict[str, dict] = {}
     page = auth.list_users()
     while page:
@@ -77,6 +88,61 @@ def _firebase_users() -> dict[str, dict]:
             }
         page = page.get_next_page()
     return out
+
+
+def _fcm_send(tokens: list[str], title: str, body: str) -> dict[str, int | bool]:
+    """Send a Firebase Cloud Messaging push to every token in the list.
+
+    Uses the FCM HTTP v1 API with an OAuth2 bearer token derived from the
+    service account. Silently skips when firebase-admin isn't installed or
+    the service-account file is missing (falls back to polling only).
+    """
+    result: dict[str, int | bool] = {
+        "pushAvailable": False,
+        "pushSent": 0,
+        "pushFailed": 0,
+    }
+    if not tokens or _firebase_app() is None:
+        return result
+    try:
+        from firebase_admin import messaging
+    except ImportError:
+        return result
+
+    result["pushAvailable"] = True
+
+    # FCM caps at 500 tokens per call.
+    for i in range(0, len(tokens), 500):
+        batch = tokens[i : i + 500]
+        message = messaging.MulticastMessage(
+            notification=messaging.Notification(title=title, body=body),
+            android=messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    sound="default",
+                    priority="high",
+                    default_vibrate_timings=True,
+                ),
+            ),
+            apns=messaging.APNSConfig(
+                payload=messaging.APNSPayload(
+                    aps=messaging.Aps(
+                        sound="default",
+                        badge=1,
+                    )
+                )
+            ),
+            tokens=batch,
+        )
+        try:
+            response = messaging.send_each_for_multicast(message)
+            result["pushSent"] += response.success_count
+            result["pushFailed"] += response.failure_count
+        except Exception as exc:  # pragma: no cover
+            import logging
+            logging.getLogger(__name__).warning("FCM send failed: %s", exc)
+            result["pushFailed"] += len(batch)
+    return result
 
 
 def _ms(ms: int | None) -> datetime | None:
@@ -281,7 +347,18 @@ def notify(req: NotifyRequest) -> dict:
         )
         s.add(n)
         s.commit()
-        return {"id": n.id, "sentAt": n.created_at.isoformat()}
+
+        # ── FCM push ────────────────────────────────────────────────────────
+        # Collect device tokens: one specific user or every registered device.
+        if req.userId:
+            profile = s.get(db.Profile, req.userId)
+            tokens = [profile.fcm_token] if profile and profile.fcm_token else []
+        else:
+            profiles = s.scalars(select(db.Profile)).all()
+            tokens = [p.fcm_token for p in profiles if p.fcm_token]
+
+        push = _fcm_send(tokens, n.title, n.body)
+        return {"id": n.id, "sentAt": n.created_at.isoformat(), **push}
 
 
 @app.get("/api/notifications")

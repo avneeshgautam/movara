@@ -5,6 +5,7 @@ import '../models/run_record.dart';
 import '../models/workout_entry.dart';
 import '../services/badges.dart';
 import '../services/goal_store.dart';
+import '../services/habit_store.dart';
 import '../services/health_service.dart';
 import '../services/run_store.dart';
 import '../services/workout_log.dart';
@@ -13,6 +14,8 @@ import '../theme/movara_colors.dart';
 import '../widgets/badges_grid.dart';
 import '../widgets/dashboard_widgets.dart';
 import '../widgets/dual_goal_ring.dart';
+import '../widgets/habit_widgets.dart';
+import 'habits_screen.dart';
 
 /// The overview / dashboard shown on the Home tab: goal ring, streak, weekly
 /// stats and achievements. The actual set logging lives on the Workout tab.
@@ -26,6 +29,7 @@ class HomeTab extends StatelessWidget {
     required this.runStore,
     required this.goalStore,
     required this.workoutLog,
+    this.habitStore,
     required this.onReload,
   });
 
@@ -33,6 +37,9 @@ class HomeTab extends StatelessWidget {
   final RunStore runStore;
   final GoalStore goalStore;
   final WorkoutLog workoutLog;
+
+  /// Habits for the "Today's habits" section; hidden when null (tests).
+  final HabitStore? habitStore;
   final Future<void> Function() onReload;
 
   @override
@@ -44,125 +51,137 @@ class HomeTab extends StatelessWidget {
       color: c.accent,
       backgroundColor: c.surface,
       child: AnimatedBuilder(
-        animation: Listenable.merge([runStore, goalStore, workoutLog]),
+        animation: Listenable.merge([
+          runStore,
+          goalStore,
+          workoutLog,
+          if (habitStore != null) habitStore!
+        ]),
         builder: (context, _) => FutureBuilder<List<WorkoutEntry>>(
-        future: entriesFuture,
-        builder: (context, snapshot) {
-          final entries = snapshot.data ?? const <WorkoutEntry>[];
-          final stats = WeekStats.from(entries);
+          future: entriesFuture,
+          builder: (context, snapshot) {
+            final entries = snapshot.data ?? const <WorkoutEntry>[];
+            final stats = WeekStats.from(entries);
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-            children: [
-              if (snapshot.hasError) ...[
-                _BackendError(error: snapshot.error),
-                const SizedBox(height: 20),
-              ] else if (snapshot.connectionState ==
-                  ConnectionState.waiting) ...[
-                _WakingBanner(),
-                const SizedBox(height: 20),
-              ],
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+              children: [
+                if (snapshot.hasError) ...[
+                  _BackendError(error: snapshot.error),
+                  const SizedBox(height: 20),
+                ] else if (snapshot.connectionState ==
+                    ConnectionState.waiting) ...[
+                  _WakingBanner(),
+                  const SizedBox(height: 20),
+                ],
 
-              SectionHeader(
-                title: "Today's Overview",
-                action: 'Edit Goal →',
-                onAction: () => _editGoal(context),
-              ),
-              // Streak on top of the reports.
-              _StreakBanner(
-                streak: stats.streak,
-                activeDays: [for (final v in stats.normalizedByWeekday) v > 0],
-                todayIndex: DateTime.now().weekday - 1,
-              ),
-              const SizedBox(height: 12),
-              // Two goal rings: today and this week, each sets/distance/steps.
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                SectionHeader(
+                  title: "Today's Overview",
+                  action: 'Edit Goal →',
+                  onAction: () => _editGoal(context),
+                ),
+                // Streak on top of the reports.
+                _StreakBanner(
+                  streak: stats.streak,
+                  activeDays: [
+                    for (final v in stats.normalizedByWeekday) v > 0
+                  ],
+                  todayIndex: DateTime.now().weekday - 1,
+                ),
+                const SizedBox(height: 12),
+                // Two goal rings: today and this week, each sets/distance/steps.
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _goalRingCard(
+                          context,
+                          title: 'Today',
+                          v: _todayValues(entries),
+                          setsGoal: goalStore.dailySetsGoal,
+                          kmGoal: goalStore.dailyKmGoal,
+                          stepsGoal: goalStore.dailyStepsGoal,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _goalRingCard(
+                          context,
+                          title: 'Week',
+                          v: _weekValues(stats),
+                          setsGoal: goalStore.setsGoal,
+                          kmGoal: goalStore.kmGoal,
+                          stepsGoal: goalStore.stepsGoal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                if (habitStore != null) ...[
+                  _HabitsSection(store: habitStore!),
+                  const SizedBox(height: 24),
+                ],
+
+                // 2×2 grid so each value has room (4-in-a-row clipped them).
+                Row(
                   children: [
                     Expanded(
-                      child: _goalRingCard(
-                        context,
-                        title: 'Today',
-                        v: _todayValues(entries),
-                        setsGoal: goalStore.dailySetsGoal,
-                        kmGoal: goalStore.dailyKmGoal,
-                        stepsGoal: goalStore.dailyStepsGoal,
+                      child: MiniStat(
+                        label: 'Sets',
+                        value: '${stats.totalSetsThisWeek}',
+                        unit: 'wk',
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: _goalRingCard(
-                        context,
-                        title: 'Week',
-                        v: _weekValues(stats),
-                        setsGoal: goalStore.setsGoal,
-                        kmGoal: goalStore.kmGoal,
-                        stepsGoal: goalStore.stepsGoal,
+                      child: MiniStat(
+                        label: 'Distance',
+                        value: runStore.totalKmThisWeek().toStringAsFixed(1),
+                        unit: 'km',
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 24),
-
-              // 2×2 grid so each value has room (4-in-a-row clipped them).
-              Row(
-                children: [
-                  Expanded(
-                    child: MiniStat(
-                      label: 'Sets',
-                      value: '${stats.totalSetsThisWeek}',
-                      unit: 'wk',
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: MiniStat(
+                        label: 'Active',
+                        value: '${runStore.activeMinutesThisWeek()}',
+                        unit: 'min',
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: MiniStat(
-                      label: 'Distance',
-                      value: runStore.totalKmThisWeek().toStringAsFixed(1),
-                      unit: 'km',
+                    const SizedBox(width: 10),
+                    // Today's real steps from Apple Health when connected,
+                    // otherwise this week's steps estimated from activities.
+                    Expanded(
+                      child: _StepsStat(
+                        weeklyEstimate: runStore.stepsThisWeek(),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: MiniStat(
-                      label: 'Active',
-                      value: '${runStore.activeMinutesThisWeek()}',
-                      unit: 'min',
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  // Today's real steps from Apple Health when connected,
-                  // otherwise this week's steps estimated from activities.
-                  Expanded(
-                    child: _StepsStat(
-                      weeklyEstimate: runStore.stepsThisWeek(),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
+                  ],
+                ),
+                const SizedBox(height: 24),
 
-              const SectionHeader(title: 'Self Achievements'),
-              ..._achievements(context, stats, entries),
-              const SizedBox(height: 24),
+                const SectionHeader(title: 'Self Achievements'),
+                ..._achievements(context, stats, entries),
+                const SizedBox(height: 24),
 
-              _badgesSection(context, stats),
-              const SizedBox(height: 24),
+                _badgesSection(context, stats),
+                const SizedBox(height: 24),
 
-              const SectionHeader(title: 'This Week'),
-              WeeklyChart(
-                values: stats.normalizedByWeekday,
-                todayIndex: DateTime.now().weekday - 1,
-              ),
-            ],
-          );
-        },
+                const SectionHeader(title: 'This Week'),
+                WeeklyChart(
+                  values: stats.normalizedByWeekday,
+                  todayIndex: DateTime.now().weekday - 1,
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -225,7 +244,8 @@ class HomeTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionHeader(title: 'Badges', action: '$earned/${badges.length} earned'),
+        SectionHeader(
+            title: 'Badges', action: '$earned/${badges.length} earned'),
         WorkoutRecordChip(
           hasRecord: workoutLog.longestSeconds > 0,
           longestLabel: formatWorkoutDuration(
@@ -279,20 +299,27 @@ class HomeTab extends StatelessWidget {
 
   Widget _legend(BuildContext context, Color dot, String label, String value) {
     final c = context.movara;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
-        const SizedBox(width: 6),
-        Text(label, style: TextStyle(color: c.textSecondary, fontSize: 11)),
-        const SizedBox(width: 4),
-        Text(value,
-            style: AppTheme.display(
-                color: c.textPrimary, fontSize: 11, fontWeight: FontWeight.w700)),
-      ],
+    // Scales down rather than overflowing the half-width ring card on small
+    // phones or with large text.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(color: c.textSecondary, fontSize: 11)),
+          const SizedBox(width: 4),
+          Text(value,
+              style: AppTheme.display(
+                  color: c.textPrimary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700)),
+        ],
+      ),
     );
   }
 
@@ -637,8 +664,7 @@ class _GoalDialogState extends State<_GoalDialog> {
       MovaraColors c, TextEditingController ctrl, String label, bool decimal) {
     return TextField(
       controller: ctrl,
-      keyboardType:
-          TextInputType.numberWithOptions(decimal: decimal),
+      keyboardType: TextInputType.numberWithOptions(decimal: decimal),
       inputFormatters: [
         decimal
             ? FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
@@ -733,40 +759,49 @@ class _StreakBanner extends StatelessWidget {
         children: [
           const Text('🔥', style: TextStyle(fontSize: 30)),
           const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+          // Takes the free space and shrinks on narrow phones instead of
+          // pushing the weekday dots off the card.
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  TweenAnimationBuilder<int>(
-                    tween: IntTween(begin: 0, end: streak),
-                    duration: const Duration(milliseconds: 700),
-                    curve: Curves.easeOut,
-                    builder: (context, val, _) => Text(
-                      '$val',
-                      style: AppTheme.display(
-                          color: c.textPrimary,
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          height: 1),
-                    ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      TweenAnimationBuilder<int>(
+                        tween: IntTween(begin: 0, end: streak),
+                        duration: const Duration(milliseconds: 700),
+                        curve: Curves.easeOut,
+                        builder: (context, val, _) => Text(
+                          '$val',
+                          style: AppTheme.display(
+                              color: c.textPrimary,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w800,
+                              height: 1),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 3),
+                        child: Text('day streak',
+                            style: TextStyle(
+                                color: c.textSecondary, fontSize: 12)),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 5),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Text('day streak',
-                        style: TextStyle(color: c.textSecondary, fontSize: 12)),
-                  ),
+                  const SizedBox(height: 2),
+                  Text(streak > 0 ? 'Keep it going!' : 'Log today to start one',
+                      style: TextStyle(color: c.textMuted, fontSize: 10)),
                 ],
               ),
-              const SizedBox(height: 2),
-              Text(streak > 0 ? 'Keep it going!' : 'Log today to start one',
-                  style: TextStyle(color: c.textMuted, fontSize: 10)),
-            ],
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -797,6 +832,122 @@ class _StreakBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// "Today's habits" on Home: only what's due today, tap to check in, a
+/// celebration when a habit hits its goal and a bigger one when all are done.
+class _HabitsSection extends StatelessWidget {
+  const _HabitsSection({required this.store});
+
+  final HabitStore store;
+
+  void _openAll(BuildContext context) => Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => HabitsScreen(store: store)));
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.movara;
+    final today = DateTime.now();
+    final due = store.dueToday();
+    final p = store.todayProgress();
+
+    Widget body;
+    if (store.habits.isEmpty) {
+      body = GestureDetector(
+        key: const ValueKey('habits-start'),
+        onTap: () => _openAll(context),
+        child: MovaraCard(
+          child: Row(
+            children: [
+              const Text('🌱', style: TextStyle(fontSize: 28)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Start a habit',
+                        style: AppTheme.display(
+                            color: c.textPrimary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700)),
+                    Text('Small daily wins, tracked with streaks.',
+                        style: TextStyle(color: c.textSecondary, fontSize: 12)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: c.textMuted),
+            ],
+          ),
+        ),
+      );
+    } else if (due.isEmpty) {
+      body = MovaraCard(
+        child: Text('Nothing due today — enjoy the rest day. 🌿',
+            style: TextStyle(color: c.textSecondary, fontSize: 13)),
+      );
+    } else {
+      final allDone = p.done == p.total;
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(
+                allDone ? '🏆 All done today!' : '${p.done} of ${p.total} done',
+                style: AppTheme.display(
+                  color: allDone ? c.accent : c.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(end: p.total == 0 ? 0 : p.done / p.total),
+                    duration: const Duration(milliseconds: 400),
+                    builder: (context, v, _) => LinearProgressIndicator(
+                      value: v,
+                      minHeight: 6,
+                      backgroundColor: c.surface2,
+                      valueColor: AlwaysStoppedAnimation(c.accent),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (final h in due) ...[
+            HabitRow(
+              habit: h,
+              day: today,
+              onCheckIn: () async {
+                final r = await store.checkIn(h.id);
+                if (context.mounted) celebrateCheckIn(context, r, store);
+              },
+              onUndo: () => store.undo(h.id),
+              onOpen: () => openHabitDetail(context, store, h),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionHeader(
+          title: "Today's Habits",
+          action: store.habits.isEmpty ? null : 'All habits →',
+          onAction: () => _openAll(context),
+        ),
+        body,
+      ],
     );
   }
 }

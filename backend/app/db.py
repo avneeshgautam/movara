@@ -143,6 +143,9 @@ class Profile(Base):
     # activity figures. Null on profiles created before these existed.
     created_at: Mapped[datetime | None] = mapped_column(DateTime)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # FCM device registration token — updated by the app on every launch.
+    # Null until the app sends it (or when the user revokes notification permission).
+    fcm_token: Mapped[str | None] = mapped_column(String(512))
 
 
 class Notification(Base):
@@ -218,6 +221,9 @@ def _migrate(session: Session) -> None:
     )
     session.execute(
         text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP")
+    )
+    session.execute(
+        text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS fcm_token VARCHAR(512)")
     )
     session.commit()
 

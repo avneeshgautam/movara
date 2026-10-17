@@ -5,7 +5,9 @@ import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/reminder_scheduler.dart';
 import '../services/chat_controller.dart';
+import '../services/fcm_service.dart';
 import '../services/goal_store.dart';
+import '../services/habit_store.dart';
 import '../services/inbox.dart';
 import '../services/water_notifications.dart';
 import '../services/motivation_reminders.dart';
@@ -20,11 +22,29 @@ import '../widgets/workout_timer_bar.dart';
 import 'account_tab.dart';
 import 'feed_tab.dart';
 import 'leaderboard_tab.dart';
+import 'habits_screen.dart';
 import 'home_tab.dart';
 import 'reminders_tab.dart';
 import 'running_tab.dart';
 import 'upgrade_screen.dart';
 import 'workout_tab.dart';
+
+/// The bottom tabs, in order. Named so nothing addresses a tab by a raw
+/// index — inserting or reordering a tab can't silently send you elsewhere.
+enum MovaraTab {
+  home(Icons.home_outlined, 'Home'),
+  workout(Icons.fitness_center, 'Workout'),
+  activity(Icons.directions_run, 'Activity'),
+  habits(Icons.eco_outlined, 'Habits'),
+  reminders(Icons.water_drop_outlined, 'Reminders'),
+  feed(Icons.chat_bubble_outline, 'Feed'),
+  account(Icons.person_outline, 'Account');
+
+  const MovaraTab(this.icon, this.label);
+
+  final IconData icon;
+  final String label;
+}
 
 /// App shell: sticky header, tab content, and the bottom tab bar from the
 /// design (Workout / Running / Account).
@@ -50,11 +70,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   final _reminders = ReminderScheduler();
   final _workoutTimer = WorkoutTimer();
   final _workoutLog = WorkoutLog();
+  final _habits = HabitStore();
   final _goals = GoalStore();
   late final ChatController _chat = ChatController(api: _api);
   late final RunStore _runs =
       RunStore(uploader: _api.uploadRun, downloader: _api.fetchRuns);
-  int _index = 0;
+  late final FcmService _fcm = FcmService(_api);
+  MovaraTab _tab = MovaraTab.home;
 
   /// The user's chosen public name, once loaded; the greeting uses it so the
   /// app shows one name everywhere.
@@ -75,12 +97,15 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _runs.load();
     _workoutTimer.load();
     _workoutLog.load();
+    _habits.load();
     _goals.load();
     // Register name/photo so this user shows on the leaderboard.
     _api.upsertProfile(_displayName,
         photoUrl: widget.auth.currentUser?.photoURL);
     WidgetsBinding.instance.addObserver(this);
     _checkInbox();
+    // Start FCM: request permission, obtain token, send it to backend.
+    _fcm.init();
   }
 
   @override
@@ -157,8 +182,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _runs.dispose();
     _workoutTimer.dispose();
     _workoutLog.dispose();
+    _habits.dispose();
     _goals.dispose();
     _chat.dispose();
+    _fcm.dispose();
     _api.dispose();
     super.dispose();
   }
@@ -196,11 +223,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     return 'Athlete';
   }
 
-  void _onTab(int i) {
-    setState(() => _index = i);
+  void _onTab(MovaraTab tab) {
+    setState(() => _tab = tab);
     // Re-fetch when opening Home so its stats reflect sets just logged on the
     // Workout tab, even if the live refresh was missed.
-    if (i == 0) _reload();
+    if (tab == MovaraTab.home) _reload();
   }
 
   /// The workout stopwatch + rest timer, opened from the header button.
@@ -261,13 +288,14 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           ),
           Expanded(
             child: IndexedStack(
-              index: _index,
+              index: _tab.index,
               children: [
                 HomeTab(
                   entriesFuture: _entriesFuture,
                   runStore: _runs,
                   goalStore: _goals,
                   workoutLog: _workoutLog,
+                  habitStore: _habits,
                   onReload: _reload,
                 ),
                 WorkoutTab(
@@ -278,6 +306,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   onReload: _reload,
                 ),
                 RunningTab(store: _runs),
+                HabitsScreen(store: _habits, embedded: true),
                 RemindersTab(scheduler: _reminders),
                 LeaderboardTab(api: _api),
                 AccountTab(
@@ -291,6 +320,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   onSignOut: widget.auth.signOut,
                   onNameChanged: (name) => setState(() => _publicName = name),
                   onOpenUpgrade: _openUpgrade,
+                  habitStore: _habits,
                   onOpenTab: _onTab,
                 ),
               ],
@@ -299,28 +329,17 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         ],
       ),
       floatingActionButton: _ChatFab(onTap: _openChat),
-      bottomNavigationBar: _TabBar(
-        index: _index,
-        onChanged: _onTab,
-      ),
+      bottomNavigationBar: MovaraTabBar(current: _tab, onChanged: _onTab),
     );
   }
 }
 
-class _TabBar extends StatelessWidget {
-  const _TabBar({required this.index, required this.onChanged});
+/// The bottom tab bar. Public so a test can check every tab fits a phone.
+class MovaraTabBar extends StatelessWidget {
+  const MovaraTabBar({super.key, required this.current, required this.onChanged});
 
-  final int index;
-  final ValueChanged<int> onChanged;
-
-  static const _items = [
-    (icon: Icons.home_outlined, label: 'Home'),
-    (icon: Icons.fitness_center, label: 'Workout'),
-    (icon: Icons.directions_run, label: 'Activity'),
-    (icon: Icons.water_drop_outlined, label: 'Reminders'),
-    (icon: Icons.chat_bubble_outline, label: 'Feed'),
-    (icon: Icons.person_outline, label: 'Account'),
-  ];
+  final MovaraTab current;
+  final ValueChanged<MovaraTab> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -334,16 +353,18 @@ class _TabBar extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Row(
-          children: List.generate(_items.length, (i) {
-            final active = i == index;
-            final item = _items[i];
+          children: MovaraTab.values.map((tab) {
+            final active = tab == current;
+            final item = tab;
             final color = active ? c.accent : c.textMuted;
 
             return Expanded(
               child: InkWell(
-                onTap: () => onChanged(i),
+                onTap: () => onChanged(tab),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  // Tight horizontal padding: seven tabs share a phone width.
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -368,13 +389,19 @@ class _TabBar extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        item.label,
-                        style: AppTheme.display(
-                          color: color,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.4,
+                      // Scales down rather than clipping "Reminders" when
+                      // seven tabs share a narrow screen.
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          item.label,
+                          maxLines: 1,
+                          style: AppTheme.display(
+                            color: color,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.4,
+                          ),
                         ),
                       ),
                     ],
@@ -382,7 +409,7 @@ class _TabBar extends StatelessWidget {
                 ),
               ),
             );
-          }),
+          }).toList(),
         ),
       ),
     );

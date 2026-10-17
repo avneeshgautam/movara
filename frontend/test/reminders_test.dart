@@ -68,6 +68,19 @@ class _FakeNotifications implements WaterNotifications {
 
   @override
   Future<bool> isScheduled(int id) async => false;
+
+  @override
+  Future<void> scheduleWeeklyAt({
+    required int id,
+    required int weekday,
+    required int hour,
+    required int minute,
+    required String title,
+    required String body,
+  }) async {}
+
+  @override
+  Future<void> cancelRange(int from, int to) async {}
 }
 
 void main() {

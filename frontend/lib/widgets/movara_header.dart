@@ -113,24 +113,26 @@ class _ProPill extends StatelessWidget {
     return GestureDetector(
       key: const ValueKey('pro-pill'),
       onTap: onTap,
+      // Deliberately small: a hint, not a call to action competing with
+      // the timer and theme controls beside it.
       child: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 11),
+        height: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(999),
           gradient: LinearGradient(
             colors: [c.accent, Color.lerp(c.accent, Colors.black, 0.3)!],
           ),
-          boxShadow: [BoxShadow(color: c.accentGlow, blurRadius: 10)],
+          boxShadow: [BoxShadow(color: c.accentGlow, blurRadius: 6)],
         ),
         child: Text(
           '⚡ PRO',
           style: AppTheme.display(
             color: Colors.white,
-            fontSize: 11,
+            fontSize: 9,
             fontWeight: FontWeight.w800,
-            letterSpacing: 1.2,
+            letterSpacing: 1,
           ),
         ),
       ),

@@ -49,15 +49,21 @@ class SectionHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title.toUpperCase(),
-            style: AppTheme.display(
-              color: c.textMuted,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.6,
+          // Flexible so a long title yields to the action on narrow phones.
+          Flexible(
+            child: Text(
+              title.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTheme.display(
+                color: c.textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.6,
+              ),
             ),
           ),
+          if (action != null) const SizedBox(width: 8),
           if (action != null)
             GestureDetector(
               onTap: onAction,

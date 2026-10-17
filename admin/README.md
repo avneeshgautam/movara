@@ -7,11 +7,22 @@ never deployed and isn't reachable from the app or the internet.
 ## Run it
 
 ```bash
+export DATABASE_URL='postgresql://postgres.<project>:PASSWORD@<pooler-host>:5432/postgres'
 ./admin/run-admin.sh        # opens http://127.0.0.1:8090
 ```
 
-It reads `DATABASE_URL` from `backend/run-local.sh` (the same live database
-the app uses), so there's nothing new to configure. Stop it with Ctrl+C.
+The launcher requires `DATABASE_URL` so it cannot silently send messages to an
+old or different database. Use the same live database connection string as the
+deployed backend, not a local development database:
+
+```bash
+export DATABASE_URL="postgresql://..."
+```
+
+Copy it from Render → movara-backend → Environment → `DATABASE_URL`, or
+from Supabase → your project → **Connect** → *Session pooler* (fill in your
+database password). Keep it in your shell environment only; never commit or
+paste it anywhere. Stop the dashboard with Ctrl+C.
 
 ## What it shows
 
@@ -27,13 +38,11 @@ the app uses), so there's nothing new to configure. Stop it with Ctrl+C.
 
 ## How notifications reach people
 
-Messages are saved to the database. The app checks for new ones **when it
-opens and whenever it comes back to the foreground**, then shows a
-notification and a card at the top of the screen (iPhone, Android and web).
-
-They don't arrive while the app is fully closed — that needs real push
-notifications (Firebase Cloud Messaging). On iPhone that also requires the
-paid Apple Developer Program; Android can get it on the free plan.
+Messages are always saved to the database. With Firebase Cloud Messaging
+configured, the app also registers a device token and the admin sends a normal
+system notification while the app is backgrounded or closed. If no token is
+available, the portal reports that it saved the message for in-app delivery.
+The app still checks messages when it opens or returns to the foreground.
 
 ## Optional: emails and sign-up times (Firebase)
 
