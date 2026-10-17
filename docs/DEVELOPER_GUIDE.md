@@ -30,7 +30,7 @@ backend:
 | Surface | How users get it | Updates |
 |---|---|---|
 | **Web app** | https://movara-app.pages.dev | Automatic within minutes of a deploy |
-| **Android app** | APK from the `android-latest` GitHub release (Account → Download App) | User re-downloads the APK; installs over the old one, keeps data |
+| **Android app** | [Latest APK](https://github.com/avneeshgautam/movara/releases/download/android-latest/movara.apk) or Account → Download App | User re-downloads the APK; installs over the old one, keeps data |
 | **iPhone app** | Installed from the Mac with `./run-ios.sh` (no App Store yet) | Reinstall from the Mac |
 | **Backend API** | https://movara-backend-h22y.onrender.com/api | Render auto-deploys from `main` |
 

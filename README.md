@@ -7,7 +7,7 @@ fitness assistant — one Flutter app for iPhone, Android and the web, on a
 FastAPI + PostgreSQL backend.
 
 - **Web app:** https://movara-app.pages.dev
-- **Android:** Account → Download App in the app, or the `android-latest` release
+- **Android:** [Download the latest APK](https://github.com/avneeshgautam/movara/releases/download/android-latest/movara.apk), or use Account → Download App in the app
 
 ## Start here
 

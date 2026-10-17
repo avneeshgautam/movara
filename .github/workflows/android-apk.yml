@@ -1,6 +1,6 @@
 name: Build Android APK
 
-# Builds a signed release APK on every push to first-build that touches the
+# Builds a signed release APK on every push to a release branch that touches the
 # frontend and publishes it as movara.apk on the "android-latest" GitHub
 # release. The app's Download App button links to that fixed URL:
 #   https://github.com/avneeshgautam/movara/releases/download/android-latest/movara.apk
@@ -14,7 +14,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [first-build]
+    branches: [first-build, python-backend-integration]
     paths:
       - "frontend/**"
       - ".github/workflows/android-apk.yml"
